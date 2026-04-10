@@ -89,17 +89,8 @@ const Signs = () => {
                       <CardTitle className="text-xl">{group.title}</CardTitle>
                       <CardDescription className="text-xs">{group.description}</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-1.5 pt-0">
-                      {items.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic">لا توجد إشارات بعد</p>
-                      ) : (
-                        items.map((sign) => (
-                          <div key={sign.id} className="flex items-center gap-2 text-xs">
-                            <span className="font-bold text-primary shrink-0">[{sign.sign_code}]</span>
-                            <span className="text-foreground">{sign.title}</span>
-                          </div>
-                        ))
-                      )}
+                    <CardContent className="pt-0">
+                      <p className="text-xs text-muted-foreground">عدد الشاخصات المتاحة: {items.length}</p>
                     </CardContent>
                   </Card>
                 );
@@ -129,10 +120,10 @@ const Signs = () => {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-4">
-                  <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
                     {items.map((sign) => (
                       <div key={sign.id} className="border rounded-lg overflow-hidden bg-background flex flex-col">
-                        <div className="h-28 bg-muted flex items-center justify-center p-1">
+                        <div className="h-24 sm:h-28 bg-muted flex items-center justify-center p-1">
                           <img
                             src={sign.image_url}
                             alt={sign.title}
@@ -140,9 +131,16 @@ const Signs = () => {
                             loading="lazy"
                           />
                         </div>
-                        <div className="p-2 text-center flex-1 flex flex-col justify-between gap-1">
-                          <p className="text-xs font-medium leading-tight">{sign.title}</p>
-                          <span className="text-[11px] font-bold text-primary">[{sign.sign_code}]</span>
+                        <div className="p-2 sm:p-2.5 text-center flex-1 flex flex-col justify-between gap-1">
+                          <p className="text-[11px] sm:text-xs md:text-sm lg:text-base font-medium leading-tight text-black">
+                            {sign.title}
+                          </p>
+                          {sign.description && (
+                            <p className="text-[10px] sm:text-[11px] md:text-xs lg:text-sm leading-tight line-clamp-2 text-red-600">
+                              {sign.description}
+                            </p>
+                          )}
+                          <span className="text-[10px] sm:text-[11px] md:text-xs font-bold text-primary">[{sign.sign_code}]</span>
                         </div>
                       </div>
                     ))}
@@ -161,13 +159,19 @@ const Signs = () => {
             <Card className="border bg-white/80 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="text-xl">جميع الشواخص</CardTitle>
-                <CardDescription className="text-xs">مرتبة حسب رقم الشاخصة تصاعديًا</CardDescription>
+                <CardDescription className="text-xs">مرتبة أبجديًا حسب الكود (أ أولًا ثم باقي الحروف)</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                  {[...activeSigns].sort((a, b) => a.sign_number - b.sign_number).map((sign) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+                  {[...activeSigns]
+                    .sort((a, b) => {
+                      const codeCmp = a.sign_code.localeCompare(b.sign_code, "ar", { sensitivity: "base", numeric: true });
+                      if (codeCmp !== 0) return codeCmp;
+                      return a.title.localeCompare(b.title, "ar", { sensitivity: "base", numeric: true });
+                    })
+                    .map((sign) => (
                     <div key={sign.id} className="border rounded-lg overflow-hidden bg-background flex flex-col">
-                      <div className="h-28 bg-muted flex items-center justify-center p-1">
+                      <div className="h-24 sm:h-28 bg-muted flex items-center justify-center p-1">
                         <img
                           src={sign.image_url}
                           alt={sign.title}
@@ -175,9 +179,16 @@ const Signs = () => {
                           loading="lazy"
                         />
                       </div>
-                      <div className="p-2 text-center flex-1 flex flex-col justify-between gap-1">
-                        <p className="text-xs font-medium leading-tight">{sign.title}</p>
-                        <span className="text-[11px] font-bold text-primary">[{sign.sign_code}]</span>
+                      <div className="p-2 sm:p-2.5 text-center flex-1 flex flex-col justify-between gap-1">
+                        <p className="text-[11px] sm:text-xs md:text-sm lg:text-base font-medium leading-tight text-black">
+                          {sign.title}
+                        </p>
+                        {sign.description && (
+                          <p className="text-[10px] sm:text-[11px] md:text-xs lg:text-sm leading-tight line-clamp-2 text-red-600">
+                            {sign.description}
+                          </p>
+                        )}
+                        <span className="text-[10px] sm:text-[11px] md:text-xs font-bold text-primary">[{sign.sign_code}]</span>
                       </div>
                     </div>
                   ))}

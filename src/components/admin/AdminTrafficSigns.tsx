@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:4000') + '/api';
 
@@ -46,10 +47,22 @@ const getSectionOption = (key: string) => SECTION_OPTIONS.find((s) => s.key === 
 const getSectionLabel  = (key: string) => getSectionOption(key)?.label ?? key;
 const getSectionLetter = (key: string) => getSectionOption(key)?.letter ?? '';
 
-function buildSignCode(sectionKey: string, signNumber: number | string): string {
+function buildSignCode(sectionKey: string, signNumber: number | string, suffix = ''): string {
   const letter = getSectionLetter(sectionKey);
   if (!letter || !signNumber) return '';
-  return `${letter}-${signNumber}`;
+  const base = `${letter}-${signNumber}`;
+  const s = suffix.trim();
+  return s ? `${base}-${s}` : base;
+}
+
+/** ترتيب أبجدي عربي حسب الكود (أ → ي) مع الرقم */
+function sortSignsByArabicCode(signs: TrafficSign[]): TrafficSign[] {
+  return [...signs].sort((a, b) => {
+    const codeCmp = a.sign_code.localeCompare(b.sign_code, 'ar', { sensitivity: 'base', numeric: true });
+    if (codeCmp !== 0) return codeCmp;
+    const titleCmp = a.title.localeCompare(b.title, 'ar', { sensitivity: 'base', numeric: true });
+    return titleCmp !== 0 ? titleCmp : a.id.localeCompare(b.id);
+  });
 }
 
 const emptyForm = {
@@ -68,10 +81,17 @@ export const AdminTrafficSigns = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [isSubSign, setIsSubSign] = useState(false);
+  const [subSignSuffix, setSubSignSuffix] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const previewCode = buildSignCode(formData.section_key, formData.sign_number);
+  const previewCode = buildSignCode(
+    formData.section_key,
+    formData.sign_number,
+    isSubSign ? subSignSuffix : '',
+  );
+  const isSubSignVariant = isSubSign && subSignSuffix.trim().length > 0;
   const normalizedTitle = formData.title.trim().toLocaleLowerCase();
   const normalizedSignNumber = Number(formData.sign_number);
   const duplicateTitleSign = normalizedTitle
@@ -81,22 +101,27 @@ export const AdminTrafficSigns = () => {
         return sign.title.trim().toLocaleLowerCase() === normalizedTitle;
       })
     : null;
-  const duplicateNumberSign = formData.section_key && Number.isFinite(normalizedSignNumber) && normalizedSignNumber > 0
+  const baseSignCode = buildSignCode(formData.section_key, formData.sign_number);
+  const targetSignCode =
+    baseSignCode &&
+    (Number.isFinite(normalizedSignNumber) && normalizedSignNumber > 0
+      ? isSubSignVariant
+        ? buildSignCode(formData.section_key, formData.sign_number, subSignSuffix.trim())
+        : baseSignCode
+      : '');
+  const duplicateSignCodeRow = targetSignCode
     ? signs.find((sign) => {
         const isSameRecord = editingSign ? sign.id === editingSign.id : false;
         if (isSameRecord) return false;
-        return sign.section_key === formData.section_key && sign.sign_number === normalizedSignNumber;
+        return sign.sign_code === targetSignCode;
       })
     : null;
 
   const fetchSigns = async () => {
     try {
-      const { data, error } = await apiClient
-        .from('traffic_signs')
-        .select()
-        .order('sign_number', { ascending: true });
+      const { data, error } = await apiClient.from('traffic_signs').select();
       if (error) throw error;
-      setSigns((data as TrafficSign[]) || []);
+      setSigns(sortSignsByArabicCode((data as TrafficSign[]) || []));
     } catch {
       toast({ title: 'خطأ', description: 'فشل في تحميل الإشارات', variant: 'destructive' });
     } finally {
@@ -110,6 +135,8 @@ export const AdminTrafficSigns = () => {
     setFormData(emptyForm);
     setImageFile(null);
     setImagePreview(null);
+    setIsSubSign(false);
+    setSubSignSuffix('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -123,13 +150,18 @@ export const AdminTrafficSigns = () => {
     }
   };
 
-  const uploadImage = async (sectionKey: string, signNumber: string | number): Promise<string> => {
+  const uploadImage = async (
+    sectionKey: string,
+    signNumber: string | number,
+    signSuffix?: string,
+  ): Promise<string> => {
     if (!imageFile) throw new Error('لم يتم اختيار صورة');
     const token = localStorage.getItem('almadena_token');
     const fd = new FormData();
     fd.append('image', imageFile);
     fd.append('section_key', sectionKey);
     fd.append('sign_number', String(signNumber));
+    if (signSuffix?.trim()) fd.append('sign_suffix', signSuffix.trim());
     const res = await fetch(`${API_BASE}/upload/signs`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -146,8 +178,8 @@ export const AdminTrafficSigns = () => {
       toast({ title: 'خطأ', description: 'القسم واسم الإشارة ورقمها مطلوبة', variant: 'destructive' });
       return;
     }
-    if (duplicateNumberSign) {
-      toast({ title: 'رقم مكرر', description: 'رقم الشاخصة مستخدم مسبقًا ضمن نفس القسم', variant: 'destructive' });
+    if (duplicateSignCodeRow) {
+      toast({ title: 'كود مكرر', description: 'كود الشاخصة مستخدم مسبقًا', variant: 'destructive' });
       return;
     }
     if (duplicateTitleSign) {
@@ -163,10 +195,18 @@ export const AdminTrafficSigns = () => {
     try {
       let image_url = editingSign?.image_url ?? '';
       if (imageFile) {
-        image_url = `http://localhost:4000${await uploadImage(formData.section_key, formData.sign_number)}`;
+        image_url = `http://localhost:4000${await uploadImage(
+          formData.section_key,
+          formData.sign_number,
+          isSubSignVariant ? subSignSuffix.trim() : undefined,
+        )}`;
       }
 
-      const sign_code = buildSignCode(formData.section_key, formData.sign_number);
+      const sign_code = buildSignCode(
+        formData.section_key,
+        formData.sign_number,
+        isSubSignVariant ? subSignSuffix.trim() : '',
+      );
       const payload = {
         section_key: formData.section_key,
         sign_number: Number(formData.sign_number),
@@ -230,6 +270,14 @@ export const AdminTrafficSigns = () => {
     });
     setImageFile(null);
     setImagePreview(sign.image_url || null);
+    const base = buildSignCode(sign.section_key, sign.sign_number);
+    if (base && sign.sign_code !== base && sign.sign_code.startsWith(`${base}-`)) {
+      setIsSubSign(true);
+      setSubSignSuffix(sign.sign_code.slice(base.length + 1));
+    } else {
+      setIsSubSign(false);
+      setSubSignSuffix('');
+    }
     if (fileInputRef.current) fileInputRef.current.value = '';
     setIsDialogOpen(true);
   };
@@ -312,9 +360,39 @@ export const AdminTrafficSigns = () => {
                   {previewCode && (
                     <p className="text-xs text-muted-foreground">كود الشاخصة: <strong>[{previewCode}]</strong></p>
                   )}
-                  {duplicateNumberSign && (
+                  <div className="flex flex-col gap-2 pt-1">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="sub-sign"
+                        checked={isSubSign}
+                        onCheckedChange={(checked) => {
+                          const on = checked === true;
+                          setIsSubSign(on);
+                          if (!on) setSubSignSuffix('');
+                        }}
+                      />
+                      <Label htmlFor="sub-sign" className="text-sm font-normal cursor-pointer">
+                        إشارة فرعية
+                      </Label>
+                    </div>
+                    {isSubSign && (
+                      <Input
+                        id="sub-sign-suffix"
+                        type="text"
+                        inputMode="text"
+                        maxLength={1}
+                        placeholder="أ"
+                        value={subSignSuffix}
+                        onChange={(e) => setSubSignSuffix(e.target.value.slice(-1))}
+                        className="text-right w-16"
+                        dir="rtl"
+                        aria-label="حرف الامتداد للمعاينة"
+                      />
+                    )}
+                  </div>
+                  {duplicateSignCodeRow && (
                     <p className="text-xs text-destructive">
-                      رقم الشاخصة مكرر ضمن نفس القسم وممنوع إضافته. الرقم المستخدم حاليًا: {duplicateNumberSign.sign_number}
+                      كود الشاخصة مكرر وممنوع إضافته. الكود المستخدم حاليًا: [{duplicateSignCodeRow.sign_code}]
                     </p>
                   )}
                 </div>
@@ -390,7 +468,7 @@ export const AdminTrafficSigns = () => {
                 </div>
 
                 <DialogFooter>
-                  <Button type="submit" disabled={uploading || !!duplicateTitleSign || !!duplicateNumberSign}>
+                  <Button type="submit" disabled={uploading || !!duplicateTitleSign || !!duplicateSignCodeRow}>
                     {uploading ? 'جاري الرفع...' : editingSign ? 'تحديث' : 'إضافة'}
                   </Button>
                 </DialogFooter>

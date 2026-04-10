@@ -55,7 +55,7 @@ export function buildUploadRouter() {
       return res.status(400).json({ message: "لم يتم إرسال أي ملف صورة" });
     }
 
-    const { section_key, sign_number } = req.body;
+    const { section_key, sign_number, sign_suffix } = req.body;
 
     if (!section_key || !SECTION_FOLDER_MAP[section_key]) {
       return res.status(400).json({ message: "section_key غير صالح أو مفقود" });
@@ -64,9 +64,12 @@ export function buildUploadRouter() {
       return res.status(400).json({ message: "sign_number مفقود أو غير صالح" });
     }
 
+    const suffixRaw = sign_suffix != null ? String(sign_suffix).trim() : "";
+    const suffixSafe = suffixRaw.slice(0, 4);
+
     const folder     = SECTION_FOLDER_MAP[section_key];
     const ext        = EXT_MAP[req.file.mimetype] || path.extname(req.file.originalname).toLowerCase() || ".png";
-    const filename   = `${sign_number}${ext}`;
+    const filename   = suffixSafe ? `${sign_number}-${suffixSafe}${ext}` : `${sign_number}${ext}`;
     const destDir    = path.join(SIGNS_ROOT, folder);
     const destPath   = path.join(destDir, filename);
 

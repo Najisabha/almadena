@@ -175,9 +175,9 @@ const statements = [
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (section_key, sign_number),
     UNIQUE (sign_code)
   );`,
+  `ALTER TABLE traffic_signs DROP CONSTRAINT IF EXISTS traffic_signs_section_key_sign_number_key;`,
   `ALTER TABLE traffic_signs ADD COLUMN IF NOT EXISTS sign_number INTEGER;`,
   `ALTER TABLE traffic_signs ADD COLUMN IF NOT EXISTS sign_code TEXT;`,
   `ALTER TABLE traffic_signs ADD COLUMN IF NOT EXISTS image_url TEXT;`,

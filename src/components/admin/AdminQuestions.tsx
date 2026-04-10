@@ -108,8 +108,9 @@ async function apiRequest<T>(
 ): Promise<{ data: T; error: { message: string } | null }> {
   try {
     const token = getToken();
-    const headers: HeadersInit = { 'Content-Type': 'application/json', ...(init.headers || {}) };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    const headers = new Headers(init.headers || {});
+    if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+    if (token) headers.set('Authorization', `Bearer ${token}`);
     const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
     const payload = await response.json();
     if (!response.ok)
@@ -365,6 +366,15 @@ function getCodeVariants(code: string): string[] {
   return Array.from(variants);
 }
 
+function findSignByCode(code: string, signs: TrafficSign[]): TrafficSign | null {
+  if (!code) return null;
+  const variants = getCodeVariants(code);
+  return (
+    signs.find((s) => variants.includes(normalizeSignCode(s.sign_code))) ??
+    null
+  );
+}
+
 function parseQuestionText(text: string, signMap: Map<string, TrafficSign>): QuestionPart[] {
   const parts: QuestionPart[] = [];
   const regex = /\[([^\]]+)\]/g;
@@ -525,7 +535,17 @@ const PreviewCard = ({ formData, sign, allSigns }: PreviewCardProps) => {
                     className="h-10 w-auto object-contain rounded"
                   />
                 ) : (
-                  <span className="truncate">{opt.text}</span>
+                  <span className="truncate flex flex-wrap items-center gap-1">
+                    {parseQuestionText(opt.text, signMap).map((part, idx) => {
+                      if (part.type === 'text') return <span key={idx}>{part.value}</span>;
+                      if (part.sign) return <SignTokenBadge key={idx} code={part.code} sign={part.sign} />;
+                      return (
+                        <span key={idx} className="text-muted-foreground font-mono">
+                          [{part.code}]
+                        </span>
+                      );
+                    })}
+                  </span>
                 )}
                 {isCorrect && <CheckCircle2 className="shrink-0 w-4 h-4 text-green-500 ml-auto" />}
               </div>
@@ -573,7 +593,7 @@ export const AdminQuestions = () => {
 
   const [formData, setFormData] = useState<FormData>(emptyForm());
 
-  const selectedSign = trafficSigns.find((s) => s.sign_code === formData.sign_code) ?? null;
+  const selectedSign = findSignByCode(formData.sign_code, trafficSigns);
 
   const fetchQuestions = async () => {
     try {
