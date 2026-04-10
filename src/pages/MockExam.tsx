@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Switch } from '@/components/ui/switch';
 import { ChevronRight, ChevronLeft, Clock, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { api as apiClient } from '@/integrations/api/client';
 import { cn } from '@/lib/utils';
 
 interface Question {
@@ -45,7 +45,7 @@ const MockExam = () => {
   // Load from DB if available
   useEffect(() => {
     const fetchQuestions = async () => {
-      const { data } = await supabase
+      const { data } = await apiClient
         .from('questions')
         .select('*')
         .eq('is_active', true)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api as apiClient } from '@/integrations/api/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -49,7 +49,7 @@ export const AdminSuccessStories = () => {
 
   const fetchStories = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await apiClient
         .from('success_stories')
         .select('*')
         .order('display_order', { ascending: true });
@@ -70,7 +70,7 @@ export const AdminSuccessStories = () => {
 
   const toggleVisibility = async (id: string, currentVisibility: boolean) => {
     try {
-      const { error } = await supabase
+      const { error } = await apiClient
         .from('success_stories')
         .update({ is_visible: !currentVisibility })
         .eq('id', id);
@@ -96,7 +96,7 @@ export const AdminSuccessStories = () => {
     if (!confirm('هل أنت متأكد من حذف هذه القصة؟')) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await apiClient
         .from('success_stories')
         .delete()
         .eq('id', id);
@@ -132,7 +132,7 @@ export const AdminSuccessStories = () => {
       };
 
       if (editingStory) {
-        const { error } = await supabase
+        const { error } = await apiClient
           .from('success_stories')
           .update(storyData)
           .eq('id', editingStory.id);
@@ -140,7 +140,7 @@ export const AdminSuccessStories = () => {
         if (error) throw error;
         toast({ title: 'تم التحديث', description: 'تم تحديث قصة النجاح بنجاح' });
       } else {
-        const { error } = await supabase
+        const { error } = await apiClient
           .from('success_stories')
           .insert([storyData]);
 

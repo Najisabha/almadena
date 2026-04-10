@@ -7,13 +7,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Car, Mail, Lock, User, Phone, CheckCircle2, Calendar as CalendarIcon, MapPin, Home, Upload, CreditCard } from 'lucide-react';
+import { Car, CreditCard, Lock, User, Phone, CheckCircle2, Calendar as CalendarIcon, Home } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
+import { api as apiClient } from '@/integrations/api/client';
 
 // Palestinian cities and their towns
 const palestinianCities: Record<string, string[]> = {
@@ -47,12 +47,12 @@ const Auth = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [loginData, setLoginData] = useState({ email: '', password: '' });
+  const [loginData, setLoginData] = useState({ idNumber: '', password: '' });
   const [signupData, setSignupData] = useState({
     firstName: '',
     lastName: '',
     dateOfBirth: undefined as Date | undefined,
-    email: '',
+    idNumber: '',
     phone: '',
     city: '',
     town: '',
@@ -67,7 +67,7 @@ const Auth = () => {
   // Check if user is already logged in
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await apiClient.auth.getSession();
       if (session) {
         navigate('/');
       }
@@ -80,8 +80,8 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginData.email,
+      const { data, error } = await apiClient.auth.signInWithPassword({
+        idNumber: loginData.idNumber,
         password: loginData.password,
       });
 
@@ -96,7 +96,7 @@ const Auth = () => {
     } catch (error: any) {
       toast({
         title: "خطأ في تسجيل الدخول",
-        description: error.message || "البريد الإلكتروني أو كلمة المرور غير صحيحة",
+        description: error.message || "رقم الهوية أو كلمة المرور غير صحيحة",
         variant: "destructive",
       });
     } finally {
@@ -145,11 +145,10 @@ const Auth = () => {
         return;
       }
 
-      const { data, error } = await supabase.auth.signUp({
-        email: signupData.email,
+      const { data, error } = await apiClient.auth.signUp({
+        idNumber: signupData.idNumber,
         password: signupData.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
           data: {
             first_name: signupData.firstName,
             last_name: signupData.lastName,
@@ -259,15 +258,15 @@ const Auth = () => {
                 <TabsContent value="login">
                   <form onSubmit={handleLogin} className="space-y-6">
                     <div className="space-y-2">
-                      <Label htmlFor="login-email" className="text-right block">البريد الإلكتروني</Label>
+                      <Label htmlFor="login-id" className="text-right block">رقم الهوية</Label>
                       <div className="relative">
-                        <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <CreditCard className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                         <Input
-                          id="login-email"
-                          type="email"
-                          placeholder="example@email.com"
-                          value={loginData.email}
-                          onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                          id="login-id"
+                          type="text"
+                          placeholder="أدخل رقم الهوية"
+                          value={loginData.idNumber}
+                          onChange={(e) => setLoginData({ ...loginData, idNumber: e.target.value })}
                           required
                           className="pr-10 text-right"
                         />
@@ -386,15 +385,15 @@ const Auth = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="signup-email" className="text-right block">البريد الإلكتروني</Label>
+                      <Label htmlFor="signup-id-number" className="text-right block">رقم الهوية</Label>
                       <div className="relative">
-                        <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <CreditCard className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                          id="signup-email"
-                          type="email"
-                          placeholder="example@email.com"
-                          value={signupData.email}
-                          onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
+                          id="signup-id-number"
+                          type="text"
+                          placeholder="أدخل رقم الهوية"
+                          value={signupData.idNumber}
+                          onChange={(e) => setSignupData({ ...signupData, idNumber: e.target.value })}
                           required
                           className="pr-10 text-right"
                         />

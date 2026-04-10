@@ -17,6 +17,7 @@ import Instructors from "./pages/Instructors";
 import LicenseRequirements from "./pages/LicenseRequirements";
 import PricingInfo from "./pages/PricingInfo";
 import StudentLookup from "./pages/StudentLookup";
+import Signs from "./pages/Signs";
 import MockExamSelector from "./pages/MockExamSelector";
 import MockExam from "./pages/MockExam";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -28,6 +29,11 @@ import AdminPricingPage from "./pages/admin/AdminPricingPage";
 import AdminAppointmentsPage from "./pages/admin/AdminAppointmentsPage";
 import AdminMaterialsPage from "./pages/admin/AdminMaterialsPage";
 import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
+import AdminSignsPage from "./pages/admin/AdminSignsPage";
+import AdminLicensesPage from "./pages/admin/AdminLicensesPage";
+import PrivateTheoryExamList from "./pages/PrivateTheoryExamList";
+import { AuthProvider } from "./features/auth/AuthProvider";
+import { ProtectedAdminRoute } from "./features/auth/AdminRoute";
 
 const queryClient = new QueryClient();
 
@@ -36,11 +42,12 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <div className="min-h-screen flex flex-col">
-          <Navigation />
-          <main className="flex-1">
-            <Routes>
+      <AuthProvider>
+        <BrowserRouter>
+          <div className="min-h-screen flex flex-col">
+            <Navigation />
+            <main className="flex-1">
+              <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/questions" element={<Questions />} />
               <Route path="/exams" element={<Exams />} />
@@ -53,26 +60,31 @@ const App = () => (
               <Route path="/license-requirements" element={<LicenseRequirements />} />
               <Route path="/pricing" element={<PricingInfo />} />
               <Route path="/student-lookup" element={<StudentLookup />} />
+              <Route path="/signs" element={<Signs />} />
               <Route path="/mock-exams" element={<MockExamSelector />} />
               <Route path="/mock-exam" element={<MockExam />} />
+              <Route path="/questions/private" element={<PrivateTheoryExamList />} />
               
               {/* Admin Routes */}
-              <Route path="/admin" element={<AdminDashboard />} />
-              <Route path="/admin/students" element={<AdminStudentsPage />} />
-              <Route path="/admin/success-stories" element={<AdminSuccessStoriesPage />} />
-              <Route path="/admin/questions" element={<AdminQuestionsPage />} />
-              <Route path="/admin/pricing" element={<AdminPricingPage />} />
-              <Route path="/admin/appointments" element={<AdminAppointmentsPage />} />
-              <Route path="/admin/materials" element={<AdminMaterialsPage />} />
-              <Route path="/admin/settings" element={<AdminSettingsPage />} />
+              <Route path="/admin" element={<ProtectedAdminRoute><AdminDashboard /></ProtectedAdminRoute>} />
+              <Route path="/admin/students" element={<ProtectedAdminRoute><AdminStudentsPage /></ProtectedAdminRoute>} />
+              <Route path="/admin/success-stories" element={<ProtectedAdminRoute><AdminSuccessStoriesPage /></ProtectedAdminRoute>} />
+              <Route path="/admin/questions" element={<ProtectedAdminRoute><AdminQuestionsPage /></ProtectedAdminRoute>} />
+              <Route path="/admin/pricing" element={<ProtectedAdminRoute><AdminPricingPage /></ProtectedAdminRoute>} />
+              <Route path="/admin/appointments" element={<ProtectedAdminRoute><AdminAppointmentsPage /></ProtectedAdminRoute>} />
+              <Route path="/admin/materials" element={<ProtectedAdminRoute><AdminMaterialsPage /></ProtectedAdminRoute>} />
+              <Route path="/admin/signs" element={<ProtectedAdminRoute><AdminSignsPage /></ProtectedAdminRoute>} />
+              <Route path="/admin/licenses" element={<ProtectedAdminRoute><AdminLicensesPage /></ProtectedAdminRoute>} />
+              <Route path="/admin/settings" element={<ProtectedAdminRoute><AdminSettingsPage /></ProtectedAdminRoute>} />
               
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
-            </Routes>
-          </main>
-          <Footer />
-        </div>
-      </BrowserRouter>
+              </Routes>
+            </main>
+            <Footer />
+          </div>
+        </BrowserRouter>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

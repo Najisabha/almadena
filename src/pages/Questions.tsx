@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,58 +15,96 @@ import {
   ChevronRight,
   CheckCircle2
 } from 'lucide-react';
+import { api as apiClient } from '@/integrations/api/client';
+
+type License = {
+  id: string;
+  code: string;
+  name_ar: string;
+  icon_url?: string | null;
+  difficulty_level?: string | null;
+  bg_color?: string | null;
+  display_order: number;
+};
+
+type QuestionWithLicenses = {
+  licenses?: Array<{ id: string; code: string; name_ar: string }>;
+};
+
+function getLicenseMeta(code: string) {
+  const normalized = code.toUpperCase();
+  if (normalized === 'B') return { fallbackIcon: Car, iconColor: 'text-primary' };
+  if (normalized === 'C1') return { fallbackIcon: Truck, iconColor: 'text-orange-600' };
+  if (normalized === 'C') return { fallbackIcon: Truck, iconColor: 'text-amber-700' };
+  if (normalized === 'D1') return { fallbackIcon: Bus, iconColor: 'text-blue-600' };
+  if (normalized === 'A') return { fallbackIcon: Bike, iconColor: 'text-red-600' };
+  if (normalized === 'T') return { fallbackIcon: Tractor, iconColor: 'text-green-600' };
+  return { fallbackIcon: Car, iconColor: 'text-primary' };
+}
 
 const Questions = () => {
   const navigate = useNavigate();
-  
+  const [licenses, setLicenses] = useState<License[]>([]);
+  const [questions, setQuestions] = useState<QuestionWithLicenses[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const categories = [
-    {
-      id: 'private',
-      title: 'أسئلة تؤوريا خصوصي',
-      icon: Car,
-      description: 'اختبار التؤوريا للمركبات الخصوصية',
-      questions: 30,
-      difficulty: 'متوسط',
-      color: 'text-primary'
-    },
-    {
-      id: 'truck',
-      title: 'أسئلة تؤوريا شحن خفيف',
-      icon: Truck,
-      description: 'اختبار التؤوريا لمركبات الشحن الخفيف',
-      questions: 30,
-      difficulty: 'متقدم',
-      color: 'text-orange-600'
-    },
-    {
-      id: 'taxi',
-      title: 'أسئلة تؤوريا عمومي',
-      icon: Bus,
-      description: 'اختبار التؤوريا للنقل العمومي والتاكسي',
-      questions: 30,
-      difficulty: 'متقدم',
-      color: 'text-blue-600'
-    },
-    {
-      id: 'motorcycle',
-      title: 'أسئلة تؤوريا دراجة نارية',
-      icon: Bike,
-      description: 'اختبار التؤوريا للدراجات النارية',
-      questions: 30,
-      difficulty: 'متوسط',
-      color: 'text-red-600'
-    },
-    {
-      id: 'tractor',
-      title: 'أسئلة تؤوريا تراكتور',
-      icon: Tractor,
-      description: 'اختبار التؤوريا للجرارات الزراعية',
-      questions: 30,
-      difficulty: 'أساسي',
-      color: 'text-green-600'
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [{ data: licensesData }, questionsRes] = await Promise.all([
+          apiClient.from('licenses').select().order('display_order', { ascending: true }),
+          fetch(`${(import.meta.env.VITE_API_URL || 'http://localhost:4000')}/api/questions`),
+        ]);
+
+        setLicenses((licensesData as License[]) || []);
+        if (questionsRes.ok) {
+          const payload = await questionsRes.json();
+          setQuestions((payload?.data as QuestionWithLicenses[]) || []);
+        } else {
+          setQuestions([]);
+        }
+      } catch {
+        setLicenses([]);
+        setQuestions([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const questionCountByCode = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const question of questions) {
+      for (const license of question.licenses || []) {
+        const code = (license.code || '').toUpperCase();
+        if (!code) continue;
+        map.set(code, (map.get(code) || 0) + 1);
+      }
     }
-  ];
+    return map;
+  }, [questions]);
+
+  const categories = useMemo(
+    () =>
+      licenses.map((license) => {
+        const meta = getLicenseMeta(license.code);
+        return {
+          id: license.id,
+          code: license.code,
+          title: `أسئلة تؤوريا ${license.name_ar}`,
+          icon: meta.fallbackIcon,
+          iconUrl: license.icon_url || '',
+          description: `اختبار التؤوريا لرخصة ${license.name_ar}`,
+          questions: questionCountByCode.get(license.code.toUpperCase()) || 0,
+          difficulty: license.difficulty_level || 'متوسط',
+          color: meta.iconColor,
+          bgColor: license.bg_color || '#ffffff',
+        };
+      }),
+    [licenses, questionCountByCode]
+  );
 
   const features = [
     {
@@ -110,7 +149,7 @@ const Questions = () => {
                 <div className="text-sm text-white/80">نسبة النجاح</div>
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                <div className="text-3xl font-bold">5</div>
+                <div className="text-3xl font-bold">{isLoading ? '...' : categories.length}</div>
                 <div className="text-sm text-white/80">أنواع رخص</div>
               </div>
             </div>
@@ -148,23 +187,46 @@ const Questions = () => {
               اختر نوع الرخصة
             </h2>
             <p className="text-xl text-muted-foreground">
-              ابدأ التدريب على الأسئلة حسب نوع الرخصة المطلوبة
+              ابدأ حل الأسئلة حسب نوع الرخصة المطلوبة
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            {isLoading && (
+              <div className="col-span-full text-center py-10 text-muted-foreground">جاري تحميل أنواع الرخص...</div>
+            )}
+            {!isLoading && categories.length === 0 && (
+              <div className="col-span-full text-center py-10 text-muted-foreground">
+                لا توجد رخص مفعلة حالياً لعرض الأسئلة.
+              </div>
+            )}
             {categories.map((category) => {
               const Icon = category.icon;
               return (
                 <Card 
                   key={category.id}
                   className="group hover:shadow-elevated transition-all duration-300 cursor-pointer border-2 hover:border-primary/50 bg-white/80 backdrop-blur-sm"
-                  onClick={() => navigate(`/mock-exams?license=${category.id}`)}
+                  onClick={() =>
+                    category.code.toUpperCase() === 'B'
+                      ? navigate('/questions/private')
+                      : navigate(`/mock-exam?category=${category.code}&difficulty=medium&exam=1`)
+                  }
                 >
                   <CardHeader>
                     <div className="flex items-start justify-between mb-4">
-                      <div className={`p-4 rounded-xl bg-gradient-card group-hover:scale-110 transition-transform duration-300`}>
-                        <Icon className={`h-8 w-8 ${category.color}`} />
+                      <div
+                        className="p-4 rounded-xl group-hover:scale-110 transition-transform duration-300"
+                        style={{ backgroundColor: category.bgColor }}
+                      >
+                        {category.iconUrl ? (
+                          <img
+                            src={category.iconUrl}
+                            alt={category.title}
+                            className="h-8 w-8 object-contain"
+                          />
+                        ) : (
+                          <Icon className={`h-8 w-8 ${category.color}`} />
+                        )}
                       </div>
                       <Badge variant="secondary" className="bg-primary/10 text-primary">
                         {category.questions} سؤال
@@ -222,7 +284,7 @@ const Questions = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button className="w-full" variant="outline">
+                  <Button className="w-full" variant="outline" onClick={() => navigate("/signs")}>
                     <span>تصفح الإشارات</span>
                     <ChevronRight className="mr-2 h-4 w-4" />
                   </Button>

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Menu, X, Car, User, BookOpen, Phone, Award, Users, Trophy, Search, Bell, Settings, LogOut, Shield } from 'lucide-react';
-import { useAdminRole } from '@/hooks/useAdminRole';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Menu, X, Car, User, BookOpen, Phone, Award, Users, Trophy, Search, Settings, LogOut, Shield } from "lucide-react";
+import { useAdminRole } from "@/hooks/useAdminRole";
+import { Link, useNavigate } from "react-router-dom";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -10,7 +10,7 @@ import {
   NavigationMenuLink,
   NavigationMenuList,
   NavigationMenuTrigger,
-} from '@/components/ui/navigation-menu';
+} from "@/components/ui/navigation-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,22 +18,46 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { api as apiClient } from "@/integrations/api/client";
+import { useToast } from "@/hooks/use-toast";
+import { useNavbarConfig } from "@/features/siteSettings/useNavbarConfig";
+import { NavbarItemConfig } from "@/features/siteSettings/navbar.types";
+
+type SessionUser = {
+  id: string;
+  email: string;
+};
+
+type Profile = {
+  first_name?: string;
+  last_name?: string;
+  avatar_url?: string;
+};
+
+const iconMap = {
+  Car,
+  BookOpen,
+  Trophy,
+  Users,
+  Award,
+  Phone,
+  User,
+} as const;
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { isAdmin } = useAdminRole();
+  const { config } = useNavbarConfig();
 
   useEffect(() => {
     // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    apiClient.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
@@ -41,7 +65,7 @@ const Navigation = () => {
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = apiClient.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         setTimeout(() => {
@@ -57,22 +81,22 @@ const Navigation = () => {
 
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
+      const { data, error } = await apiClient
+        .from<Profile>("profiles")
+        .select("*")
+        .eq("id", userId)
         .single();
-      
+
       if (error) throw error;
       setProfile(data);
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error("Error fetching profile:", error);
     }
   };
 
   const handleLogout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
+      const { error } = await apiClient.auth.signOut();
       if (error) throw error;
       
       toast({
@@ -80,11 +104,11 @@ const Navigation = () => {
         description: "نراك قريباً",
       });
       
-      navigate('/');
-    } catch (error: any) {
+      navigate("/");
+    } catch (error) {
       toast({
         title: "خطأ",
-        description: error.message,
+        description: error instanceof Error ? error.message : "تعذر تسجيل الخروج",
         variant: "destructive",
       });
     }
@@ -94,25 +118,33 @@ const Navigation = () => {
     if (profile?.first_name && profile?.last_name) {
       return `${profile.first_name[0]}${profile.last_name[0]}`;
     }
-    return user?.email?.[0]?.toUpperCase() || 'U';
+    return user?.idNumber?.[0]?.toUpperCase() || "U";
   };
 
-  const menuItems = [
-    { title: 'الرئيسية', href: '/', icon: Car },
-    { title: 'أسئلة التووري', href: '/questions', icon: BookOpen },
-    { title: 'الامتحانات التجريبية', href: '/mock-exams', icon: Award },
-    { title: 'نتائج طلابنا', href: '/student-results', icon: Trophy },
-    { title: 'مدربينا', href: '/instructors', icon: Users },
-    { title: 'لوحة التحكم', href: '/dashboard', icon: User },
-    { title: 'اتصل بنا', href: '/contact', icon: Phone },
-  ];
+  const menuItems = useMemo(
+    () =>
+      config.items
+        .filter((item) => item.kind === "menu" && item.isVisible)
+        .sort((a, b) => a.order - b.order),
+    [config.items]
+  );
 
-  const inquiryItems = [
-    { title: 'متطلبات الرخصة', href: '/license-requirements', description: 'تعرف على شروط ومتطلبات الحصول على الرخصة' },
-    { title: 'أسعار الدروس', href: '/pricing', description: 'باقات وأسعار تدريب القيادة' },
-    { title: 'نتائج طلاب التووريا', href: '/student-lookup', description: 'استعلم عن نتائجك في التووريا' },
-    { title: 'نتائج طلاب العملي', href: '/student-lookup', description: 'استعلم عن نتائجك في الامتحان العملي' },
-  ];
+  const inquiryItems = useMemo(
+    () =>
+      config.items
+        .filter((item) => item.kind === "inquiry" && item.isVisible)
+        .sort((a, b) => a.order - b.order),
+    [config.items]
+  );
+
+  const desktopPrimaryItems = menuItems.filter(
+    (item) => item.href !== "/contact" && item.href !== "/mock-exams" && item.href !== "/signs"
+  );
+
+  const resolveIcon = (item: NavbarItemConfig) => {
+    const key = (item.iconKey ?? "Car") as keyof typeof iconMap;
+    return iconMap[key] || Car;
+  };
 
   return (
     <nav className="bg-white/95 backdrop-blur-md shadow-navigation sticky top-0 z-50 border-b border-border/50">
@@ -131,18 +163,15 @@ const Navigation = () => {
 
           {/* Desktop Menu */}
           <div className="hidden lg:flex items-center space-x-6 rtl:space-x-reverse">
-            <Link to="/" className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10">
-              الرئيسية
-            </Link>
-            <Link to="/questions" className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10">
-              أسئلة التووري
-            </Link>
-            <Link to="/student-results" className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10">
-              نتائج طلابنا
-            </Link>
-            <Link to="/instructors" className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10">
-              مدربينا
-            </Link>
+            {desktopPrimaryItems.map((item) => (
+              <Link
+                key={item.id}
+                to={item.href}
+                className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10"
+              >
+                {item.title}
+              </Link>
+            ))}
             
             {/* Inquiry Dropdown */}
             <NavigationMenu>
@@ -155,7 +184,7 @@ const Navigation = () => {
                   <NavigationMenuContent>
                     <ul className="grid w-[400px] gap-3 p-4">
                       {inquiryItems.map((item) => (
-                        <li key={item.href}>
+                        <li key={item.id}>
                           <NavigationMenuLink asChild>
                             <Link
                               to={item.href}
@@ -163,7 +192,7 @@ const Navigation = () => {
                             >
                               <div className="text-sm font-medium leading-none text-right">{item.title}</div>
                               <p className="line-clamp-2 text-sm leading-snug text-muted-foreground text-right">
-                                {item.description}
+                                {item.description ?? ""}
                               </p>
                             </Link>
                           </NavigationMenuLink>
@@ -175,12 +204,17 @@ const Navigation = () => {
               </NavigationMenuList>
             </NavigationMenu>
 
-            <Link to="/mock-exams" className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10">
-              الامتحانات التجريبية
-            </Link>
-            <Link to="/contact" className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10">
-              اتصل بنا
-            </Link>
+            {menuItems
+              .filter((item) => item.href === "/mock-exams" || item.href === "/contact" || item.href === "/signs")
+              .map((item) => (
+                <Link
+                  key={item.id}
+                  to={item.href}
+                  className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10"
+                >
+                  {item.title}
+                </Link>
+              ))}
             
             {isAdmin && user && (
               <Link to="/admin" className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10 flex items-center gap-2">
@@ -191,12 +225,6 @@ const Navigation = () => {
             
             {user ? (
               <>
-                {/* Notifications Bell */}
-                <Button variant="ghost" size="icon" className="relative">
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute top-1 right-1 h-2 w-2 bg-destructive rounded-full"></span>
-                </Button>
-
                 {/* User Menu */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -216,7 +244,7 @@ const Navigation = () => {
                           {profile?.first_name} {profile?.last_name}
                         </p>
                         <p className="text-xs leading-none text-muted-foreground">
-                          {user?.email}
+                          رقم الهوية: {user?.idNumber}
                         </p>
                       </div>
                     </DropdownMenuLabel>
@@ -271,17 +299,20 @@ const Navigation = () => {
         {isOpen && (
           <div className="lg:hidden py-6 border-t border-border/50 bg-white/95 backdrop-blur-md max-h-[70vh] overflow-y-auto">
             <div className="flex flex-col space-y-3">
-              {menuItems.map((item) => (
+              {menuItems.map((item) => {
+                const Icon = resolveIcon(item);
+                return (
                 <Link
-                  key={item.href}
+                  key={item.id}
                   to={item.href}
                   className="flex items-center space-x-3 rtl:space-x-reverse text-foreground hover:text-primary transition-all duration-300 px-4 py-3 mx-2 rounded-lg hover:bg-primary/10 font-medium"
                   onClick={() => setIsOpen(false)}
                 >
-                  <item.icon className="h-5 w-5" />
+                  <Icon className="h-5 w-5" />
                   <span>{item.title}</span>
                 </Link>
-              ))}
+                );
+              })}
               
               {/* Mobile Inquiry Section */}
               <div className="px-4 pt-4 pb-2">
@@ -292,7 +323,7 @@ const Navigation = () => {
                 <div className="space-y-2">
                   {inquiryItems.map((item) => (
                     <Link
-                      key={item.href}
+                      key={item.id}
                       to={item.href}
                       className="block text-foreground hover:text-primary transition-all duration-300 px-3 py-2 rounded-lg hover:bg-primary/10 text-sm"
                       onClick={() => setIsOpen(false)}
@@ -318,7 +349,7 @@ const Navigation = () => {
                           {profile?.first_name} {profile?.last_name}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {user?.email}
+                          رقم الهوية: {user?.idNumber}
                         </p>
                       </div>
                     </div>

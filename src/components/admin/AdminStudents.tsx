@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api as apiClient } from '@/integrations/api/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -49,7 +49,7 @@ export const AdminStudents = () => {
   const fetchStudents = async () => {
     try {
       // Fetch students first
-      const { data: studentsData, error: studentsError } = await supabase
+      const { data: studentsData, error: studentsError } = await apiClient
         .from('students')
         .select('*')
         .order('created_at', { ascending: false });
@@ -59,7 +59,7 @@ export const AdminStudents = () => {
       // Then fetch profiles for these students
       if (studentsData && studentsData.length > 0) {
         const userIds = studentsData.map(s => s.user_id);
-        const { data: profilesData, error: profilesError } = await supabase
+        const { data: profilesData, error: profilesError } = await apiClient
           .from('profiles')
           .select('id, first_name, last_name, phone, license_type')
           .in('id', userIds);
@@ -104,7 +104,7 @@ export const AdminStudents = () => {
         notes: formData.notes || null,
       };
 
-      const { error } = await supabase
+      const { error } = await apiClient
         .from('students')
         .update(updateData)
         .eq('id', editingStudent.id);
@@ -123,7 +123,7 @@ export const AdminStudents = () => {
     if (!confirm('هل أنت متأكد من حذف هذا الطالب؟')) return;
 
     try {
-      const { error } = await supabase.from('students').delete().eq('id', id);
+      const { error } = await apiClient.from('students').delete().eq('id', id);
       if (error) throw error;
       toast({ title: 'تم الحذف', description: 'تم حذف الطالب بنجاح' });
       fetchStudents();

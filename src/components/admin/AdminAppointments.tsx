@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api as apiClient } from '@/integrations/api/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -67,7 +67,7 @@ export const AdminAppointments = () => {
 
   const fetchAppointments = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await apiClient
         .from('appointments')
         .select('*')
         .order('appointment_date', { ascending: true });
@@ -87,7 +87,7 @@ export const AdminAppointments = () => {
 
   const updateStatus = async (id: string, newStatus: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await apiClient
         .from('appointments')
         .update({ status: newStatus })
         .eq('id', id);
@@ -104,7 +104,7 @@ export const AdminAppointments = () => {
     if (!confirm('هل أنت متأكد من حذف هذا الموعد؟')) return;
 
     try {
-      const { error } = await supabase.from('appointments').delete().eq('id', id);
+      const { error } = await apiClient.from('appointments').delete().eq('id', id);
       if (error) throw error;
       toast({ title: 'تم الحذف', description: 'تم حذف الموعد بنجاح' });
       fetchAppointments();
@@ -128,7 +128,7 @@ export const AdminAppointments = () => {
       };
 
       if (editingAppointment) {
-        const { error } = await supabase
+        const { error } = await apiClient
           .from('appointments')
           .update(appointmentData)
           .eq('id', editingAppointment.id);

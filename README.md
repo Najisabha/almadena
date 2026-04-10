@@ -1,73 +1,72 @@
-# Welcome to your Lovable project
+# Almadena Academy
 
-## Project info
+Reference website: [almadena.vercel.app](https://almadena.vercel.app/).
 
-**URL**: https://lovable.dev/projects/a23ee0ef-bb28-47a3-b7f8-1f18a141dab4
+## Stack
 
-## How can I edit this code?
+- Frontend: React + TypeScript + Vite + Tailwind + shadcn/ui
+- Backend: Express + PostgreSQL + JWT
 
-There are several ways of editing your application.
+## Architecture
 
-**Use Lovable**
+### Frontend
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/a23ee0ef-bb28-47a3-b7f8-1f18a141dab4) and start prompting.
+- `src/features/auth`: session-aware auth provider and route guards.
+- `src/features/admin`: admin role access service.
+- `src/features/siteSettings`: typed navbar config schema/defaults/service/hooks.
+- `src/components`: reusable UI and domain components.
+- `src/pages`: route-level page composition.
 
-Changes made via Lovable will be committed automatically to this repo.
+### Backend
 
-**Use your preferred IDE**
+- `backend/src/config`: env validation and runtime config.
+- `backend/src/modules/auth`: authentication endpoints.
+- `backend/src/modules/table`: table CRUD endpoints with column allowlists.
+- `backend/src/app.js`: express app composition.
+- `backend/src/server.js`: server bootstrap only.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Run Locally
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+### 1) Frontend
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
 npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# copy .env.example to .env and update values
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### 2) Backend
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```sh
+cd backend
+npm i
+# copy .env.example to .env and update values
+npm run db:init
+npm run dev
+```
 
-**Use GitHub Codespaces**
+## Backend Env Contract
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- `DATABASE_URL`: postgres connection string
+- `JWT_SECRET`: at least 24 characters
+- `CLIENT_ORIGIN`: frontend URL allowed by CORS
+- `PORT`: backend port (default `4000`)
 
-## What technologies are used for this project?
+## Tests
 
-This project is built with:
+Run backend smoke tests:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```sh
+cd backend
+npm test
+```
 
-## How can I deploy this project?
+## Parity Tracking
 
-Simply open [Lovable](https://lovable.dev/projects/a23ee0ef-bb28-47a3-b7f8-1f18a141dab4) and click on Share -> Publish.
+- Use `docs/parity-checklist.md` to track page/component/behavior parity against production.
 
-## Can I connect a custom domain to my Lovable project?
+## Navbar Signals From Admin
 
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- `Admin -> Site Settings` now controls navbar menu links, inquiry links, and notification badge behavior.
+- Config is persisted as `site_settings.setting_key = navbar_config`.
+- Frontend navigation renders from this config with defaults fallback if stored JSON is invalid.

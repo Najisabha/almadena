@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api as apiClient } from '@/integrations/api/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -54,7 +54,7 @@ export const AdminPricing = () => {
 
   const fetchPackages = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await apiClient
         .from('pricing')
         .select('*')
         .order('display_order', { ascending: true });
@@ -84,7 +84,7 @@ export const AdminPricing = () => {
       };
 
       if (editingPackage) {
-        const { error } = await supabase
+        const { error } = await apiClient
           .from('pricing')
           .update(packageData)
           .eq('id', editingPackage.id);
@@ -92,7 +92,7 @@ export const AdminPricing = () => {
         if (error) throw error;
         toast({ title: 'تم التحديث', description: 'تم تحديث الباقة بنجاح' });
       } else {
-        const { error } = await supabase
+        const { error } = await apiClient
           .from('pricing')
           .insert([packageData]);
         
@@ -129,7 +129,7 @@ export const AdminPricing = () => {
 
   const toggleActive = async (id: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
+      const { error } = await apiClient
         .from('pricing')
         .update({ is_active: !currentStatus })
         .eq('id', id);
@@ -146,7 +146,7 @@ export const AdminPricing = () => {
     if (!confirm('هل أنت متأكد من حذف هذه الباقة؟')) return;
 
     try {
-      const { error } = await supabase.from('pricing').delete().eq('id', id);
+      const { error } = await apiClient.from('pricing').delete().eq('id', id);
       if (error) throw error;
       toast({ title: 'تم الحذف', description: 'تم حذف الباقة بنجاح' });
       fetchPackages();

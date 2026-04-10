@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api as apiClient } from '@/integrations/api/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -70,7 +70,7 @@ export const AdminStudyMaterials = () => {
 
   const fetchMaterials = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await apiClient
         .from('study_materials')
         .select('*')
         .order('display_order', { ascending: true });
@@ -90,7 +90,7 @@ export const AdminStudyMaterials = () => {
 
   const toggleActive = async (id: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
+      const { error } = await apiClient
         .from('study_materials')
         .update({ is_active: !currentStatus })
         .eq('id', id);
@@ -107,7 +107,7 @@ export const AdminStudyMaterials = () => {
     if (!confirm('هل أنت متأكد من حذف هذه المادة؟')) return;
 
     try {
-      const { error } = await supabase.from('study_materials').delete().eq('id', id);
+      const { error } = await apiClient.from('study_materials').delete().eq('id', id);
       if (error) throw error;
       toast({ title: 'تم الحذف', description: 'تم حذف المادة بنجاح' });
       fetchMaterials();
@@ -135,7 +135,7 @@ export const AdminStudyMaterials = () => {
       };
 
       if (editingMaterial) {
-        const { error } = await supabase
+        const { error } = await apiClient
           .from('study_materials')
           .update(materialData)
           .eq('id', editingMaterial.id);
@@ -143,7 +143,7 @@ export const AdminStudyMaterials = () => {
         if (error) throw error;
         toast({ title: 'تم التحديث', description: 'تم تحديث المادة بنجاح' });
       } else {
-        const { error } = await supabase
+        const { error } = await apiClient
           .from('study_materials')
           .insert([materialData]);
 

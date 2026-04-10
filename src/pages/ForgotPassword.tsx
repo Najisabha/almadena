@@ -4,22 +4,22 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, ArrowRight, ArrowLeft } from "lucide-react";
+import { CreditCard, ArrowRight, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const ForgotPassword = () => {
-  const [email, setEmail] = useState("");
+  const [idNumber, setIdNumber] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email) {
+    if (!idNumber) {
       toast({
         title: "خطأ",
-        description: "الرجاء إدخال البريد الإلكتروني",
+        description: "الرجاء إدخال رقم الهوية",
         variant: "destructive",
       });
       return;
@@ -28,19 +28,17 @@ const ForgotPassword = () => {
     setIsLoading(true);
 
     try {
-      // Here you would integrate with your backend/Supabase
-      // For now, we'll simulate the action
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      setEmailSent(true);
+      setSubmitted(true);
       toast({
-        title: "تم إرسال البريد",
-        description: "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني",
+        title: "تم",
+        description: "سيتم التواصل معك لإعادة تعيين كلمة المرور",
       });
     } catch (error) {
       toast({
         title: "خطأ",
-        description: "حدث خطأ أثناء إرسال البريد الإلكتروني",
+        description: "حدث خطأ، يرجى المحاولة مجددًا",
         variant: "destructive",
       });
     } finally {
@@ -54,31 +52,30 @@ const ForgotPassword = () => {
         <Card className="shadow-elevated border-border/50">
           <CardHeader className="space-y-3 text-center">
             <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-              <Mail className="w-6 h-6 text-primary" />
+              <CreditCard className="w-6 h-6 text-primary" />
             </div>
             <CardTitle className="text-2xl font-bold">نسيت كلمة المرور</CardTitle>
             <CardDescription className="text-base">
-              {emailSent 
-                ? "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني"
-                : "أدخل بريدك الإلكتروني وسنرسل لك رابط إعادة تعيين كلمة المرور"}
+              {submitted
+                ? "تم استلام طلبك، سيتم التواصل معك لإعادة تعيين كلمة المرور"
+                : "أدخل رقم هويتك وسيتم التواصل معك لإعادة تعيين كلمة المرور"}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!emailSent ? (
+            {!submitted ? (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">البريد الإلكتروني</Label>
+                  <Label htmlFor="id-number">رقم الهوية</Label>
                   <div className="relative">
-                    <Mail className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <CreditCard className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="email"
-                      type="email"
-                      placeholder="example@email.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="pr-10"
+                      id="id-number"
+                      type="text"
+                      placeholder="أدخل رقم الهوية"
+                      value={idNumber}
+                      onChange={(e) => setIdNumber(e.target.value)}
+                      className="pr-10 text-right"
                       disabled={isLoading}
-                      dir="ltr"
                     />
                   </div>
                 </div>
@@ -92,7 +89,7 @@ const ForgotPassword = () => {
                     "جاري الإرسال..."
                   ) : (
                     <>
-                      إرسال رابط إعادة التعيين
+                      إرسال طلب إعادة التعيين
                       <ArrowRight className="mr-2 h-4 w-4" />
                     </>
                   )}
@@ -111,7 +108,7 @@ const ForgotPassword = () => {
             ) : (
               <div className="space-y-4 text-center">
                 <div className="text-sm text-muted-foreground">
-                  إذا لم تستلم البريد خلال بضع دقائق، يرجى التحقق من مجلد البريد المزعج
+                  تواصل مع إدارة الأكاديمية لإعادة تعيين كلمة المرور
                 </div>
                 <Link to="/auth">
                   <Button variant="outline" className="w-full">
@@ -121,10 +118,10 @@ const ForgotPassword = () => {
                 </Link>
                 <Button 
                   variant="ghost" 
-                  onClick={() => setEmailSent(false)}
+                  onClick={() => setSubmitted(false)}
                   className="w-full"
                 >
-                  إرسال البريد مرة أخرى
+                  إرسال طلب مرة أخرى
                 </Button>
               </div>
             )}

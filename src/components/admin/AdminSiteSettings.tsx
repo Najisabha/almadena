@@ -1,45 +1,54 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
-import { Save, Phone, Mail, MapPin, MessageCircle } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useEffect, useMemo, useState } from "react";
+import { api as apiClient } from "@/integrations/api/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { Save, Phone, Mail, MapPin, MessageCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useNavbarConfig } from "@/features/siteSettings/useNavbarConfig";
+import { NavbarSignalsEditor } from "./settings/NavbarSignalsEditor";
+import { NotificationBadgeEditor } from "./settings/NotificationBadgeEditor";
 
-interface Setting {
+type Setting = {
   id: string;
   setting_key: string;
   setting_value: string | null;
   setting_type: string;
   description: string | null;
-}
+};
 
 export const AdminSiteSettings = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+  const navbarConfigState = useNavbarConfig();
+
+  const protectedSettingKeys = useMemo(() => new Set(["navbar_config"]), []);
 
   const fetchSettings = async () => {
     try {
-      const { data, error } = await supabase
-        .from('site_settings')
-        .select('*')
-        .order('setting_key');
+      const { data, error } = await apiClient
+        .from("site_settings")
+        .select("*")
+        .order("setting_key");
 
       if (error) throw error;
-      
+
       const settingsMap: Record<string, string> = {};
       data?.forEach((setting: Setting) => {
+        if (protectedSettingKeys.has(setting.setting_key)) {
+          return;
+        }
         settingsMap[setting.setting_key] = setting.setting_value || '';
       });
       setSettings(settingsMap);
-    } catch (error: any) {
+    } catch {
       toast({
-        title: 'خطأ',
-        description: 'فشل في تحميل الإعدادات',
-        variant: 'destructive',
+        title: "خطأ",
+        description: "فشل في تحميل الإعدادات",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -49,29 +58,34 @@ export const AdminSiteSettings = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      const { error: navbarError } = await navbarConfigState.persist(navbarConfigState.config);
+      if (navbarError) {
+        throw new Error(navbarError);
+      }
+
       const updates = Object.entries(settings).map(([key, value]) => ({
         setting_key: key,
         setting_value: value,
       }));
 
       for (const update of updates) {
-        const { error } = await supabase
-          .from('site_settings')
+        const { error } = await apiClient
+          .from("site_settings")
           .update({ setting_value: update.setting_value })
-          .eq('setting_key', update.setting_key);
+          .eq("setting_key", update.setting_key);
 
         if (error) throw error;
       }
 
       toast({
-        title: 'تم الحفظ',
-        description: 'تم حفظ الإعدادات بنجاح',
+        title: "تم الحفظ",
+        description: "تم حفظ الإعدادات بنجاح",
       });
-    } catch (error: any) {
+    } catch (error) {
       toast({
-        title: 'خطأ',
-        description: error.message,
-        variant: 'destructive',
+        title: "خطأ",
+        description: error instanceof Error ? error.message : "تعذر حفظ الإعدادات",
+        variant: "destructive",
       });
     } finally {
       setIsSaving(false);
@@ -86,10 +100,19 @@ export const AdminSiteSettings = () => {
   };
 
   useEffect(() => {
-    fetchSettings();
-  }, []);
+    void fetchSettings();
+  }, [protectedSettingKeys]);
 
-  if (isLoading) {
+  useEffect(() => {
+    if (navbarConfigState.warning) {
+      toast({
+        title: "تنبيه",
+        description: navbarConfigState.warning,
+      });
+    }
+  }, [navbarConfigState.warning, toast]);
+
+  if (isLoading || navbarConfigState.isLoading) {
     return (
       <Card>
         <CardContent className="py-8">
@@ -194,6 +217,31 @@ export const AdminSiteSettings = () => {
               />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>إعدادات عناصر النافبار</CardTitle>
+          <CardDescription>تحكم كامل بعناصر القائمة وروابط الاستعلام والترتيب والإظهار</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-8">
+          <NavbarSignalsEditor
+            title="عناصر القائمة الرئيسية"
+            kind="menu"
+            items={navbarConfigState.config.items}
+            onChange={(items) => navbarConfigState.setConfig({ ...navbarConfigState.config, items })}
+          />
+          <NavbarSignalsEditor
+            title="عناصر الاستعلام"
+            kind="inquiry"
+            items={navbarConfigState.config.items}
+            onChange={(items) => navbarConfigState.setConfig({ ...navbarConfigState.config, items })}
+          />
+          <NotificationBadgeEditor
+            badge={navbarConfigState.config.badge}
+            onChange={(badge) => navbarConfigState.setConfig({ ...navbarConfigState.config, badge })}
+          />
         </CardContent>
       </Card>
 
