@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { loadNavbarConfig, saveNavbarConfig } from "./navbar.service";
+import { loadNavbarConfig } from "./navbar.service";
 import { NavbarConfig } from "./navbar.types";
 import { defaultNavbarConfig } from "./navbar.defaults";
 
@@ -16,22 +16,14 @@ export function useNavbarConfig() {
     setIsLoading(false);
   }, []);
 
-  const persist = useCallback(async (nextConfig: NavbarConfig) => {
-    setConfig(nextConfig);
-    const { error } = await saveNavbarConfig(nextConfig);
-    return { error };
-  }, []);
-
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   return {
     config,
-    setConfig,
     isLoading,
     warning,
     refresh,
-    persist,
   };
 }

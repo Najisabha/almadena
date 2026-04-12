@@ -12,17 +12,17 @@ const Hero = () => {
   ];
 
   const quickLinks = [
-    { title: 'أسئلة التووري', href: '/questions', color: 'bg-primary' },
-    { title: 'الامتحانات التجريبية', href: '/exams', color: 'bg-accent' },
+    { title: 'أسئلة التووريا والامتحانات', href: '/questions', color: 'bg-primary' },
+    { title: 'إشارات المرور', href: '/signs', color: 'bg-accent' },
     { title: 'نتائج الطلاب', href: '/results', color: 'bg-success' },
     { title: 'مواعيد الدروس', href: '/schedule', color: 'bg-warning' },
   ];
 
   return (
-    <div className="relative overflow-hidden">
+    <div className="relative w-full overflow-x-hidden">
       {/* Hero Background */}
       <div 
-        className="min-h-screen bg-cover bg-center bg-no-repeat relative"
+        className="min-h-screen w-full bg-cover bg-center bg-no-repeat relative"
         style={{ backgroundImage: `url(${heroImage})` }}
       >
         <div className="absolute inset-0 bg-gradient-hero/95"></div>
@@ -59,22 +59,6 @@ const Hero = () => {
               <Button size="lg" variant="outline" className="bg-white/10 backdrop-blur-md border-white/30 text-white hover:bg-white/20 text-xl px-12 py-8 rounded-2xl" asChild>
                 <Link to="/dashboard">شاهد النتائج</Link>
               </Button>
-            </div>
-            
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-8 max-w-2xl mx-auto">
-              <div className="text-center">
-                <div className="text-4xl font-bold text-primary mb-2">10K+</div>
-                <div className="text-sm text-white/80">خريج ناجح</div>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl font-bold text-primary mb-2">95%</div>
-                <div className="text-sm text-white/80">نسبة النجاح</div>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl font-bold text-primary mb-2">15+</div>
-                <div className="text-sm text-white/80">سنة خبرة</div>
-              </div>
             </div>
           </div>
 

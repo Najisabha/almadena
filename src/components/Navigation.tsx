@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Car, User, BookOpen, Phone, Award, Users, Trophy, Search, Settings, LogOut, Shield } from "lucide-react";
+import { Menu, X, Car, User, BookOpen, Phone, Award, Users, Trophy, Settings, LogOut, Shield, ClipboardList, ChevronRight, ChevronLeft } from "lucide-react";
 import { useAdminRole } from "@/hooks/useAdminRole";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -19,11 +19,50 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { api as apiClient } from "@/integrations/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavbarConfig } from "@/features/siteSettings/useNavbarConfig";
 import { NavbarItemConfig } from "@/features/siteSettings/navbar.types";
+import { cn } from "@/lib/utils";
+
+type License = {
+  id: string;
+  code: string;
+  name_ar: string;
+  icon_url?: string | null;
+  bg_color?: string | null;
+  is_active?: boolean;
+};
+
+type DifficultyOption = {
+  value: string;
+  label: string;
+  description: string;
+};
+
+const DIFFICULTY_OPTIONS: DifficultyOption[] = [
+  { value: "easy",   label: "سهل",     description: "30 سؤالاً من الأسئلة السهلة" },
+  { value: "medium", label: "متوسط",   description: "30 سؤالاً من الأسئلة المتوسطة" },
+  { value: "hard",   label: "صعب",     description: "30 سؤالاً من الأسئلة الصعبة" },
+  { value: "random", label: "عشوائي",  description: "30 سؤالاً عشوائياً من جميع المستويات" },
+];
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000";
+
+function resolveImageUrl(url?: string | null): string {
+  if (!url) return "";
+  const clean = String(url).trim();
+  if (/^https?:\/\//i.test(clean)) return clean;
+  if (clean.startsWith("//")) return `https:${clean}`;
+  return `${API_BASE}${clean.startsWith("/") ? "" : "/"}${clean}`;
+}
 
 type SessionUser = {
   id: string;
@@ -46,6 +85,34 @@ const iconMap = {
   User,
 } as const;
 
+/** ترتيب ثابت داخل كل مجموعة؛ العناصر المخفية في الإعدادات تُستبعد تلقائياً */
+const DESKTOP_GROUP_HREFS = {
+  home: ["/"] as const,
+  learning: ["/questions", "/mock-exams", "/signs"] as const,
+  academy: ["/student-results", "/instructors"] as const,
+  contact: ["/contact"] as const,
+};
+
+function NavGroupDivider() {
+  return (
+    <div
+      className="hidden xl:block h-6 w-px shrink-0 bg-border/60 mx-2"
+      aria-hidden
+    />
+  );
+}
+
+function MobileNavSectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-semibold text-muted-foreground px-4 pt-4 pb-1">
+      {children}
+    </p>
+  );
+}
+
+const navLinkClass =
+  "inline-flex items-center gap-2 text-foreground hover:text-primary transition-colors duration-200 text-sm font-medium py-2 px-2.5 rounded-md hover:bg-primary/10 whitespace-nowrap";
+
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -54,6 +121,46 @@ const Navigation = () => {
   const { toast } = useToast();
   const { isAdmin } = useAdminRole();
   const { config } = useNavbarConfig();
+
+  // Practice exam dialog state
+  const [practiceOpen, setPracticeOpen] = useState(false);
+  const [practiceStep, setPracticeStep] = useState<1 | 2>(1);
+  const [licenses, setLicenses] = useState<License[]>([]);
+  const [selectedLicense, setSelectedLicense] = useState<License | null>(null);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<string | null>(null);
+  const [licensesLoading, setLicensesLoading] = useState(false);
+
+  const openPracticeDialog = async () => {
+    setPracticeStep(1);
+    setSelectedLicense(null);
+    setSelectedDifficulty(null);
+    setPracticeOpen(true);
+    if (licenses.length === 0) {
+      setLicensesLoading(true);
+      try {
+        const { data } = await apiClient
+          .from<License>("licenses")
+          .select()
+          .order("display_order", { ascending: true });
+        setLicenses(
+          ((data as unknown as License[]) || []).filter((l) => l.is_active !== false)
+        );
+      } catch {
+        setLicenses([]);
+      } finally {
+        setLicensesLoading(false);
+      }
+    }
+  };
+
+  const startPracticeExam = () => {
+    if (!selectedLicense || !selectedDifficulty) return;
+    setPracticeOpen(false);
+    setIsOpen(false);
+    navigate(
+      `/mock-exam?license=${encodeURIComponent(selectedLicense.code)}&practice=1&difficulty=${selectedDifficulty}&perPage=30&exam=1`
+    );
+  };
 
   useEffect(() => {
     // Check current session
@@ -137,16 +244,41 @@ const Navigation = () => {
     [config.items]
   );
 
-  const desktopPrimaryItems = menuItems.filter(
-    (item) => item.href !== "/contact" && item.href !== "/mock-exams" && item.href !== "/signs"
-  );
+  const desktopNavGroups = useMemo(() => {
+    const visible = menuItems.slice().sort((a, b) => a.order - b.order);
+    const usedIds = new Set<string>();
+
+    const pick = (hrefs: readonly string[]) => {
+      const out: NavbarItemConfig[] = [];
+      for (const href of hrefs) {
+        const item = visible.find((i) => i.href === href && !usedIds.has(i.id));
+        if (item) {
+          usedIds.add(item.id);
+          out.push(item);
+        }
+      }
+      return out;
+    };
+
+    return {
+      home: pick(DESKTOP_GROUP_HREFS.home),
+      learning: pick(DESKTOP_GROUP_HREFS.learning),
+      academy: pick(DESKTOP_GROUP_HREFS.academy),
+      contact: pick(DESKTOP_GROUP_HREFS.contact),
+      rest: visible.filter((i) => !usedIds.has(i.id)),
+    };
+  }, [menuItems]);
 
   const resolveIcon = (item: NavbarItemConfig) => {
     const key = (item.iconKey ?? "Car") as keyof typeof iconMap;
     return iconMap[key] || Car;
   };
 
+  const mobileRowClass =
+    "flex items-center gap-3 text-foreground hover:text-primary transition-all duration-300 px-4 py-3 mx-2 rounded-lg hover:bg-primary/10 font-medium";
+
   return (
+    <>
     <nav className="bg-white/95 backdrop-blur-md shadow-navigation sticky top-0 z-50 border-b border-border/50">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-20">
@@ -161,25 +293,56 @@ const Navigation = () => {
             </div>
           </Link>
 
-          {/* Desktop Menu */}
-          <div className="hidden lg:flex items-center space-x-6 rtl:space-x-reverse">
-            {desktopPrimaryItems.map((item) => (
-              <Link
-                key={item.id}
-                to={item.href}
-                className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10"
+          {/* Desktop Menu — مجموعات: رئيسية | تعلم | أكاديمية | استعلام | تواصل | حساب */}
+          <div className="hidden lg:flex flex-1 min-w-0 items-center justify-end gap-2 xl:gap-3 ms-4">
+            <div className="flex items-center gap-1 shrink-0">
+              {desktopNavGroups.home.map((item) => (
+                <Link key={item.id} to={item.href} className={navLinkClass}>
+                  {item.title}
+                </Link>
+              ))}
+            </div>
+
+            <NavGroupDivider />
+
+            <div className="flex items-center gap-1 shrink-0">
+              {desktopNavGroups.learning.map((item) => (
+                <Link key={item.id} to={item.href} className={navLinkClass}>
+                  {item.title}
+                </Link>
+              ))}
+              <button
+                type="button"
+                onClick={openPracticeDialog}
+                className={cn(navLinkClass, "border-0 bg-transparent cursor-pointer")}
               >
-                {item.title}
-              </Link>
-            ))}
-            
-            {/* Inquiry Dropdown */}
-            <NavigationMenu>
+                <ClipboardList className="h-4 w-4 shrink-0 text-primary/80" />
+                الامتحان التجريبي
+              </button>
+            </div>
+
+            <NavGroupDivider />
+
+            <div className="flex items-center gap-1 shrink-0">
+              {desktopNavGroups.academy.map((item) => (
+                <Link key={item.id} to={item.href} className={navLinkClass}>
+                  {item.title}
+                </Link>
+              ))}
+            </div>
+
+            <NavGroupDivider />
+
+            <NavigationMenu className="max-w-max shrink-0">
               <NavigationMenuList>
                 <NavigationMenuItem>
-                  <NavigationMenuTrigger className="text-foreground hover:text-primary font-medium">
-                    <Search className="h-4 w-4 ml-2" />
-                    الاستعلام عن
+                  <NavigationMenuTrigger
+                    className={cn(
+                      navLinkClass,
+                      "h-auto min-h-10 bg-transparent hover:bg-primary/10 data-[state=open]:bg-primary/10 data-[active]:bg-primary/10"
+                    )}
+                  >
+                    الاستعلام والخدمات
                   </NavigationMenuTrigger>
                   <NavigationMenuContent>
                     <ul className="grid w-[400px] gap-3 p-4">
@@ -204,21 +367,34 @@ const Navigation = () => {
               </NavigationMenuList>
             </NavigationMenu>
 
-            {menuItems
-              .filter((item) => item.href === "/mock-exams" || item.href === "/contact" || item.href === "/signs")
-              .map((item) => (
-                <Link
-                  key={item.id}
-                  to={item.href}
-                  className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10"
-                >
-                  {item.title}
-                </Link>
-              ))}
-            
+            {(desktopNavGroups.contact.length > 0 || desktopNavGroups.rest.length > 0) && (
+              <>
+                <NavGroupDivider />
+                <div className="flex items-center gap-1 shrink-0">
+                  {desktopNavGroups.contact.map((item) => (
+                    <Link
+                      key={item.id}
+                      to={item.href}
+                      className={cn(navLinkClass, "text-muted-foreground hover:text-primary")}
+                    >
+                      {item.title}
+                    </Link>
+                  ))}
+                  {desktopNavGroups.rest.map((item) => (
+                    <Link key={item.id} to={item.href} className={navLinkClass}>
+                      {item.title}
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <NavGroupDivider />
+
+            <div className="flex items-center gap-2 shrink-0">
             {isAdmin && user && (
-              <Link to="/admin" className="text-foreground hover:text-primary transition-all duration-300 font-medium py-2 px-3 rounded-lg hover:bg-primary/10 flex items-center gap-2">
-                <Shield className="h-4 w-4" />
+              <Link to="/admin" className={navLinkClass}>
+                <Shield className="h-4 w-4 shrink-0 text-muted-foreground" />
                 Admin
               </Link>
             )}
@@ -282,6 +458,7 @@ const Navigation = () => {
                 <Link to="/auth">تسجيل الدخول</Link>
               </Button>
             )}
+            </div>
           </div>
 
           {/* Mobile Menu Button */}
@@ -298,41 +475,127 @@ const Navigation = () => {
         {/* Mobile Menu */}
         {isOpen && (
           <div className="lg:hidden py-6 border-t border-border/50 bg-white/95 backdrop-blur-md max-h-[70vh] overflow-y-auto">
-            <div className="flex flex-col space-y-3">
-              {menuItems.map((item) => {
+            <div className="flex flex-col">
+              {desktopNavGroups.home.length > 0 && (
+                <>
+                  <MobileNavSectionTitle>الرئيسية</MobileNavSectionTitle>
+                  {desktopNavGroups.home.map((item) => {
+                    const Icon = resolveIcon(item);
+                    return (
+                      <Link
+                        key={item.id}
+                        to={item.href}
+                        className={mobileRowClass}
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <Icon className="h-5 w-5 shrink-0 text-primary/80" />
+                        <span className="flex-1 text-right">{item.title}</span>
+                      </Link>
+                    );
+                  })}
+                </>
+              )}
+
+              <MobileNavSectionTitle>التعلم والامتحان</MobileNavSectionTitle>
+              {desktopNavGroups.learning.map((item) => {
                 const Icon = resolveIcon(item);
                 return (
-                <Link
-                  key={item.id}
-                  to={item.href}
-                  className="flex items-center space-x-3 rtl:space-x-reverse text-foreground hover:text-primary transition-all duration-300 px-4 py-3 mx-2 rounded-lg hover:bg-primary/10 font-medium"
-                  onClick={() => setIsOpen(false)}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span>{item.title}</span>
-                </Link>
+                  <Link
+                    key={item.id}
+                    to={item.href}
+                    className={mobileRowClass}
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <Icon className="h-5 w-5 shrink-0 text-primary/80" />
+                    <span className="flex-1 text-right">{item.title}</span>
+                  </Link>
                 );
               })}
-              
-              {/* Mobile Inquiry Section */}
-              <div className="px-4 pt-4 pb-2">
-                <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground mb-3">
-                  <Search className="h-4 w-4" />
-                  <span>الاستعلام عن</span>
+              <button
+                type="button"
+                onClick={openPracticeDialog}
+                className={cn(mobileRowClass, "border-0 bg-transparent cursor-pointer text-right")}
+              >
+                <ClipboardList className="h-5 w-5 shrink-0 text-primary/80" />
+                <span className="flex-1 text-right">الامتحان التجريبي</span>
+              </button>
+
+              {desktopNavGroups.academy.length > 0 && (
+                <>
+                  <MobileNavSectionTitle>الأكاديمية</MobileNavSectionTitle>
+                  {desktopNavGroups.academy.map((item) => {
+                    const Icon = resolveIcon(item);
+                    return (
+                      <Link
+                        key={item.id}
+                        to={item.href}
+                        className={mobileRowClass}
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <Icon className="h-5 w-5 shrink-0 text-primary/80" />
+                        <span className="flex-1 text-right">{item.title}</span>
+                      </Link>
+                    );
+                  })}
+                </>
+              )}
+
+              {inquiryItems.length > 0 && (
+                <div className="pt-2">
+                  <MobileNavSectionTitle>الاستعلام والخدمات</MobileNavSectionTitle>
+                  <div className="space-y-1 px-2 pt-1">
+                    {inquiryItems.map((item) => (
+                      <Link
+                        key={item.id}
+                        to={item.href}
+                        className="flex flex-col gap-0.5 text-foreground hover:text-primary transition-all duration-300 px-4 py-2.5 mx-2 rounded-lg hover:bg-primary/10 text-sm"
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <span className="font-medium text-right">{item.title}</span>
+                        {item.description ? (
+                          <span className="text-xs text-muted-foreground text-right line-clamp-2">
+                            {item.description}
+                          </span>
+                        ) : null}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  {inquiryItems.map((item) => (
-                    <Link
-                      key={item.id}
-                      to={item.href}
-                      className="block text-foreground hover:text-primary transition-all duration-300 px-3 py-2 rounded-lg hover:bg-primary/10 text-sm"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      {item.title}
-                    </Link>
-                  ))}
-                </div>
-              </div>
+              )}
+
+              {(desktopNavGroups.contact.length > 0 || desktopNavGroups.rest.length > 0) && (
+                <>
+                  <MobileNavSectionTitle>تواصل وروابط إضافية</MobileNavSectionTitle>
+                  {desktopNavGroups.contact.map((item) => {
+                    const Icon = resolveIcon(item);
+                    return (
+                      <Link
+                        key={item.id}
+                        to={item.href}
+                        className={mobileRowClass}
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 text-right">{item.title}</span>
+                      </Link>
+                    );
+                  })}
+                  {desktopNavGroups.rest.map((item) => {
+                    const Icon = resolveIcon(item);
+                    return (
+                      <Link
+                        key={item.id}
+                        to={item.href}
+                        className={mobileRowClass}
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <Icon className="h-5 w-5 shrink-0 text-primary/80" />
+                        <span className="flex-1 text-right">{item.title}</span>
+                      </Link>
+                    );
+                  })}
+                </>
+              )}
 
               <div className="px-4 pt-2">
                 {user ? (
@@ -384,6 +647,105 @@ const Navigation = () => {
         )}
       </div>
     </nav>
+
+    {/* Practice Exam Dialog */}
+    <Dialog open={practiceOpen} onOpenChange={(open) => { setPracticeOpen(open); if (!open) { setPracticeStep(1); setSelectedDifficulty(null); } }}>
+      <DialogContent className="sm:max-w-md" dir="rtl">
+        <DialogHeader>
+          <DialogTitle className="text-right flex items-center gap-2">
+            <ClipboardList className="h-5 w-5 text-primary" />
+            الامتحان التجريبي
+            {practiceStep === 2 && selectedLicense && (
+              <span className="text-sm font-normal text-muted-foreground mr-auto">
+                — {selectedLicense.name_ar}
+              </span>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+
+        {practiceStep === 1 && (
+          <div className="space-y-3 mt-2">
+            <p className="text-sm text-muted-foreground text-right">اختر نوع الرخصة:</p>
+            {licensesLoading && (
+              <p className="text-center text-muted-foreground py-4">جاري تحميل الرخص...</p>
+            )}
+            {!licensesLoading && licenses.length === 0 && (
+              <p className="text-center text-muted-foreground py-4">لا توجد رخص متاحة.</p>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              {licenses.map((license) => (
+                <button
+                  key={license.id}
+                  onClick={() => {
+                    setSelectedLicense(license);
+                    setPracticeStep(2);
+                  }}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all duration-200 text-right"
+                >
+                  {license.icon_url ? (
+                    <img
+                      src={resolveImageUrl(license.icon_url)}
+                      alt={license.name_ar}
+                      className="h-10 w-10 object-contain rounded-lg"
+                      style={{ backgroundColor: license.bg_color || "#f3f4f6" }}
+                    />
+                  ) : (
+                    <div
+                      className="h-10 w-10 rounded-lg flex items-center justify-center"
+                      style={{ backgroundColor: license.bg_color || "#f3f4f6" }}
+                    >
+                      <Car className="h-5 w-5 text-white" />
+                    </div>
+                  )}
+                  <span className="font-semibold text-sm">{license.name_ar}</span>
+                  <span className="text-xs text-muted-foreground">({license.code})</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {practiceStep === 2 && (
+          <div className="space-y-3 mt-2">
+            <div className="flex items-center gap-2 mb-1">
+              <button
+                onClick={() => { setPracticeStep(1); setSelectedDifficulty(null); }}
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+                رجوع
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground text-right">اختر مستوى الصعوبة:</p>
+            <div className="grid grid-cols-2 gap-3">
+              {DIFFICULTY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSelectedDifficulty(opt.value)}
+                  className={`p-4 rounded-xl border-2 text-right transition-all duration-200 ${
+                    selectedDifficulty === opt.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:border-primary/50 hover:bg-primary/5"
+                  }`}
+                >
+                  <div className="font-semibold text-sm">{opt.label}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{opt.description}</div>
+                </button>
+              ))}
+            </div>
+            <Button
+              className="w-full mt-2"
+              disabled={!selectedDifficulty}
+              onClick={startPracticeExam}
+            >
+              <ChevronLeft className="h-4 w-4 ml-1" />
+              ابدأ الامتحان
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   );
 };
 

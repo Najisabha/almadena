@@ -5,9 +5,8 @@ import { Input } from '@/components/ui/input';
 const Footer = () => {
   const quickLinks = [
     { title: 'الرئيسية', href: '/' },
-    { title: 'أسئلة التووري', href: '/questions' },
-    { title: 'الامتحانات', href: '/exams' },
-    { title: 'دراسة التووري', href: '/study' },
+    { title: 'أسئلة التووريا والامتحانات', href: '/questions' },
+    { title: 'دراسة التووريا', href: '/study' },
     { title: 'النتائج', href: '/results' },
     { title: 'اتصل بنا', href: '/contact' }
   ];

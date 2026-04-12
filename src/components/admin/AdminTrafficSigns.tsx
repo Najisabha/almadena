@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { api as apiClient } from '@/integrations/api/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Pencil, Trash2, Plus, Eye, EyeOff, Upload } from 'lucide-react';
+import { Pencil, Trash2, Plus, Eye, EyeOff, Upload, FileDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -282,6 +283,38 @@ export const AdminTrafficSigns = () => {
     setIsDialogOpen(true);
   };
 
+  const exportToExcel = () => {
+    if (signs.length === 0) {
+      toast({ title: 'تنبيه', description: 'لا توجد شواخص للتصدير' });
+      return;
+    }
+
+    const rows = signs.map((sign) => ({
+      'الكود': sign.sign_code,
+      'القسم': getSectionLabel(sign.section_key),
+      'الاسم': sign.title,
+      'الوصف': sign.description ?? '',
+      'الحالة': sign.is_active ? 'نشط' : 'غير نشط',
+      'رابط الصورة': sign.image_url,
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet['!cols'] = [
+      { wch: 12 },
+      { wch: 22 },
+      { wch: 35 },
+      { wch: 40 },
+      { wch: 12 },
+      { wch: 55 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'الشواخص');
+    XLSX.writeFile(workbook, 'الشواخص.xlsx');
+
+    toast({ title: 'تم التصدير', description: `تم تصدير ${signs.length} شاخصة بنجاح` });
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -303,6 +336,11 @@ export const AdminTrafficSigns = () => {
             <CardTitle>إدارة الشواخص</CardTitle>
             <CardDescription>إضافة وتعديل وحذف شواخص المرور مع صورة إجبارية لكل شاخصة</CardDescription>
           </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={exportToExcel} disabled={signs.length === 0}>
+              <FileDown className="ml-2 h-4 w-4" />
+              تصدير الشواخص
+            </Button>
           <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) { setEditingSign(null); resetForm(); } setIsDialogOpen(open); }}>
             <DialogTrigger asChild>
               <Button onClick={() => { resetForm(); setEditingSign(null); }}>
@@ -475,6 +513,7 @@ export const AdminTrafficSigns = () => {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
       </CardHeader>
       <CardContent>

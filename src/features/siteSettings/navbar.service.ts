@@ -5,6 +5,9 @@ import { NavbarConfig } from "./navbar.types";
 
 const NAVBAR_CONFIG_KEY = "navbar_config";
 
+/** عناصر قديمة أُزيلت من الإعدادات الافتراضية (مثل تكرار نفس الرابط) */
+const DEPRECATED_NAVBAR_ITEM_IDS = new Set(["student-lookup-practical"]);
+
 type SiteSettingRow = {
   id: string;
   setting_key: string;
@@ -12,14 +15,15 @@ type SiteSettingRow = {
 };
 
 function mergeWithDefaults(config: NavbarConfig): NavbarConfig {
-  const byId = new Map(config.items.map((item) => [item.id, item]));
+  const prunedItems = config.items.filter((item) => !DEPRECATED_NAVBAR_ITEM_IDS.has(item.id));
+  const byId = new Map(prunedItems.map((item) => [item.id, item]));
   const mergedItems = defaultNavbarConfig.items.map((defaultItem) => {
     const existing = byId.get(defaultItem.id);
     return existing ? { ...defaultItem, ...existing } : defaultItem;
   });
 
   // Keep custom admin-created items too.
-  const customItems = config.items.filter(
+  const customItems = prunedItems.filter(
     (item) => !defaultNavbarConfig.items.some((defaultItem) => defaultItem.id === item.id)
   );
 
@@ -54,37 +58,4 @@ export async function loadNavbarConfig(): Promise<{ config: NavbarConfig; warnin
   } catch {
     return { config: defaultNavbarConfig, warning: "Corrupted navbar config JSON. Defaults applied." };
   }
-}
-
-export async function saveNavbarConfig(config: NavbarConfig): Promise<{ error: string | null }> {
-  const value = JSON.stringify(config);
-  const { data, error: selectError } = await apiClient
-    .from<SiteSettingRow>("site_settings")
-    .select("*")
-    .eq("setting_key", NAVBAR_CONFIG_KEY)
-    .maybeSingle();
-
-  if (selectError) {
-    return { error: selectError.message };
-  }
-
-  if (data?.id) {
-    const { error } = await apiClient
-      .from("site_settings")
-      .update({ setting_value: value, setting_type: "json", description: "Navbar menu, inquiry and badge config" })
-      .eq("id", data.id);
-    return { error: error?.message ?? null };
-  }
-
-  const { error } = await apiClient.from("site_settings").insert([
-    {
-      setting_key: NAVBAR_CONFIG_KEY,
-      setting_value: value,
-      setting_type: "json",
-      description: "Navbar menu, inquiry and badge config",
-      is_public: true,
-    },
-  ]);
-
-  return { error: error?.message ?? null };
 }

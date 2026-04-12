@@ -6,9 +6,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Save, Phone, Mail, MapPin, MessageCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useNavbarConfig } from "@/features/siteSettings/useNavbarConfig";
-import { NavbarSignalsEditor } from "./settings/NavbarSignalsEditor";
-import { NotificationBadgeEditor } from "./settings/NotificationBadgeEditor";
 
 type Setting = {
   id: string;
@@ -23,7 +20,6 @@ export const AdminSiteSettings = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
-  const navbarConfigState = useNavbarConfig();
 
   const protectedSettingKeys = useMemo(() => new Set(["navbar_config"]), []);
 
@@ -58,11 +54,6 @@ export const AdminSiteSettings = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const { error: navbarError } = await navbarConfigState.persist(navbarConfigState.config);
-      if (navbarError) {
-        throw new Error(navbarError);
-      }
-
       const updates = Object.entries(settings).map(([key, value]) => ({
         setting_key: key,
         setting_value: value,
@@ -103,16 +94,7 @@ export const AdminSiteSettings = () => {
     void fetchSettings();
   }, [protectedSettingKeys]);
 
-  useEffect(() => {
-    if (navbarConfigState.warning) {
-      toast({
-        title: "تنبيه",
-        description: navbarConfigState.warning,
-      });
-    }
-  }, [navbarConfigState.warning, toast]);
-
-  if (isLoading || navbarConfigState.isLoading) {
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="py-8">
@@ -217,31 +199,6 @@ export const AdminSiteSettings = () => {
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>إعدادات عناصر النافبار</CardTitle>
-          <CardDescription>تحكم كامل بعناصر القائمة وروابط الاستعلام والترتيب والإظهار</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-8">
-          <NavbarSignalsEditor
-            title="عناصر القائمة الرئيسية"
-            kind="menu"
-            items={navbarConfigState.config.items}
-            onChange={(items) => navbarConfigState.setConfig({ ...navbarConfigState.config, items })}
-          />
-          <NavbarSignalsEditor
-            title="عناصر الاستعلام"
-            kind="inquiry"
-            items={navbarConfigState.config.items}
-            onChange={(items) => navbarConfigState.setConfig({ ...navbarConfigState.config, items })}
-          />
-          <NotificationBadgeEditor
-            badge={navbarConfigState.config.badge}
-            onChange={(badge) => navbarConfigState.setConfig({ ...navbarConfigState.config, badge })}
-          />
         </CardContent>
       </Card>
 

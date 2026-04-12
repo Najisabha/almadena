@@ -1,9 +1,22 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Pencil, Trash2, Plus, Eye, EyeOff, ImagePlus, X, CheckCircle2 } from 'lucide-react';
+import {
+  Pencil,
+  Trash2,
+  Plus,
+  Eye,
+  EyeOff,
+  ImagePlus,
+  X,
+  CheckCircle2,
+  Search,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -19,6 +32,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api as apiClient } from '@/integrations/api/client';
 
 const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:4000') + '/api';
@@ -593,6 +607,57 @@ export const AdminQuestions = () => {
 
   const [formData, setFormData] = useState<FormData>(emptyForm());
 
+  const PAGE_SIZE = 20;
+  const [searchText, setSearchText] = useState('');
+  const [filterCategory, setFilterCategory] = useState('__all__');
+  const [filterDifficulty, setFilterDifficulty] = useState('__all__');
+  const [filterStatus, setFilterStatus] = useState('__all__');
+  const [filterLicense, setFilterLicense] = useState('__all__');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const filteredQuestions = useMemo(() => {
+    const needle = searchText.trim();
+    const needleLower = needle.toLowerCase();
+    return questions.filter((question) => {
+      if (needle && !question.question_text.toLowerCase().includes(needleLower)) return false;
+      if (filterCategory !== '__all__' && question.category !== filterCategory) return false;
+      if (filterDifficulty !== '__all__' && question.difficulty !== filterDifficulty) return false;
+      if (filterStatus === 'active' && !question.is_active) return false;
+      if (filterStatus === 'inactive' && question.is_active) return false;
+      if (
+        filterLicense !== '__all__' &&
+        !(question.licenses || []).some((l) => l.code === filterLicense)
+      )
+        return false;
+      return true;
+    });
+  }, [questions, searchText, filterCategory, filterDifficulty, filterStatus, filterLicense]);
+
+  const totalFiltered = filteredQuestions.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE));
+  const pageForSlice = Math.min(currentPage, totalPages);
+
+  const paginatedQuestions = useMemo(() => {
+    const start = (pageForSlice - 1) * PAGE_SIZE;
+    return filteredQuestions.slice(start, start + PAGE_SIZE);
+  }, [filteredQuestions, pageForSlice]);
+
+  const hasActiveFilters =
+    searchText.trim() !== '' ||
+    filterCategory !== '__all__' ||
+    filterDifficulty !== '__all__' ||
+    filterStatus !== '__all__' ||
+    filterLicense !== '__all__';
+
+  const clearFilters = () => {
+    setSearchText('');
+    setFilterCategory('__all__');
+    setFilterDifficulty('__all__');
+    setFilterStatus('__all__');
+    setFilterLicense('__all__');
+    setCurrentPage(1);
+  };
+
   const selectedSign = findSignByCode(formData.sign_code, trafficSigns);
 
   const fetchQuestions = async () => {
@@ -755,6 +820,16 @@ export const AdminQuestions = () => {
     fetchTrafficSigns();
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchText, filterCategory, filterDifficulty, filterStatus, filterLicense]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
   if (isLoading) {
     return (
       <Card>
@@ -768,7 +843,11 @@ export const AdminQuestions = () => {
     );
   }
 
+  const rangeStart = totalFiltered === 0 ? 0 : (pageForSlice - 1) * PAGE_SIZE + 1;
+  const rangeEnd = totalFiltered === 0 ? 0 : Math.min(pageForSlice * PAGE_SIZE, totalFiltered);
+
   return (
+    <TooltipProvider delayDuration={300}>
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
@@ -950,96 +1029,234 @@ export const AdminQuestions = () => {
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="space-y-4">
         {questions.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">لا توجد أسئلة بعد</div>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right">السؤال</TableHead>
-                  <TableHead className="text-right">التصنيف</TableHead>
-                  <TableHead className="text-right">الصعوبة</TableHead>
-                  <TableHead className="text-right">الإجابة</TableHead>
-                  <TableHead className="text-right">الرخص</TableHead>
-                  <TableHead className="text-right">الحالة</TableHead>
-                  <TableHead className="text-right">الإجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {questions.map((question) => (
-                  <TableRow key={question.id}>
-                    <TableCell className="max-w-xs truncate">{question.question_text}</TableCell>
-                    <TableCell>
-                      {question.category ? (
-                        <Badge variant="outline">{question.category}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {question.difficulty === 'easy'
-                        ? 'سهل'
-                        : question.difficulty === 'medium'
-                        ? 'متوسط'
-                        : 'صعب'}
-                    </TableCell>
-                    <TableCell className="font-bold">{question.correct_answer}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {(question.licenses || []).length > 0 ? (
-                          question.licenses.map((l) => (
-                            <Badge key={l.id} variant="secondary" className="text-xs">
-                              {l.code}
+          <>
+            <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-sm font-medium text-foreground">تصفية الأسئلة</span>
+                {hasActiveFilters && (
+                  <Button type="button" variant="ghost" size="sm" className="mr-auto" onClick={clearFilters}>
+                    <X className="ml-1 h-4 w-4" />
+                    مسح الفلاتر
+                  </Button>
+                )}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    dir="rtl"
+                    className="pr-9"
+                    placeholder="بحث في نص السؤال..."
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    aria-label="بحث في الأسئلة"
+                  />
+                </div>
+                <div>
+                  <Label className="sr-only">التصنيف</Label>
+                  <Select value={filterCategory} onValueChange={setFilterCategory}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="التصنيف" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">كل التصنيفات</SelectItem>
+                      {CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {cat}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="sr-only">الصعوبة</Label>
+                  <Select value={filterDifficulty} onValueChange={setFilterDifficulty}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="الصعوبة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">كل المستويات</SelectItem>
+                      <SelectItem value="easy">سهل</SelectItem>
+                      <SelectItem value="medium">متوسط</SelectItem>
+                      <SelectItem value="hard">صعب</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="sr-only">الحالة</Label>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="الحالة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">كل الحالات</SelectItem>
+                      <SelectItem value="active">نشط</SelectItem>
+                      <SelectItem value="inactive">غير نشط</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="sr-only">الرخصة</Label>
+                  <Select value={filterLicense} onValueChange={setFilterLicense}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="الرخصة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">كل الرخص</SelectItem>
+                      {licenses.map((l) => (
+                        <SelectItem key={l.id} value={l.code}>
+                          {l.name_ar} ({l.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {totalFiltered === 0
+                  ? 'لا توجد نتائج مطابقة للفلاتر'
+                  : `عرض ${rangeStart}–${rangeEnd} من ${totalFiltered} سؤال${
+                      totalFiltered !== questions.length ? ` (من ${questions.length} إجمالاً)` : ''
+                    }`}
+              </p>
+            </div>
+
+            {totalFiltered > 0 && (
+              <>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-right">السؤال</TableHead>
+                        <TableHead className="text-right">التصنيف</TableHead>
+                        <TableHead className="text-right">الصعوبة</TableHead>
+                        <TableHead className="text-right">الإجابة</TableHead>
+                        <TableHead className="text-right">الرخص</TableHead>
+                        <TableHead className="text-right">الحالة</TableHead>
+                        <TableHead className="text-right">الإجراءات</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedQuestions.map((question) => (
+                        <TableRow key={question.id}>
+                          <TableCell className="max-w-xs">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="cursor-default truncate">{question.question_text}</div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-md text-right" dir="rtl">
+                                <p className="whitespace-pre-wrap">{question.question_text}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell>
+                            {question.category ? (
+                              <Badge variant="outline">{question.category}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {question.difficulty === 'easy'
+                              ? 'سهل'
+                              : question.difficulty === 'medium'
+                                ? 'متوسط'
+                                : 'صعب'}
+                          </TableCell>
+                          <TableCell className="font-bold">{question.correct_answer}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {(question.licenses || []).length > 0 ? (
+                                question.licenses.map((l) => (
+                                  <Badge key={l.id} variant="secondary" className="text-xs">
+                                    {l.code}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={question.is_active ? 'default' : 'secondary'}>
+                              {question.is_active ? 'نشط' : 'غير نشط'}
                             </Badge>
-                          ))
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={question.is_active ? 'default' : 'secondary'}>
-                        {question.is_active ? 'نشط' : 'غير نشط'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => toggleActive(question.id, question.is_active)}
-                        >
-                          {question.is_active ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openEditDialog(question)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => deleteQuestion(question.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => toggleActive(question.id, question.is_active)}
+                              >
+                                {question.is_active ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openEditDialog(question)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => deleteQuestion(question.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+                    <p className="text-sm text-muted-foreground">
+                      الصفحة {pageForSlice} من {totalPages}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pageForSlice <= 1}
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      >
+                        <ChevronRight className="ml-1 h-4 w-4" />
+                        السابق
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pageForSlice >= totalPages}
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      >
+                        التالي
+                        <ChevronLeft className="mr-1 h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
+    </TooltipProvider>
   );
 };

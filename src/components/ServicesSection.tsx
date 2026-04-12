@@ -14,7 +14,7 @@ const ServicesSection = () => {
   const services = [
     {
       icon: BookOpen,
-      title: 'أسئلة التووري',
+      title: 'اسئلة التووريا',
       description: 'مكتبة شاملة من الأسئلة مصنفة حسب نوع الرخصة (عمومي/خصوصي/تراكتور)',
       features: ['أسئلة إشارات المرور', 'قوانين السير', 'الميكانيك الأساسي', 'امتحانات شاملة'],
       color: 'bg-primary',
@@ -30,7 +30,7 @@ const ServicesSection = () => {
     },
     {
       icon: GraduationCap,
-      title: 'دراسة التووري',
+      title: 'دراسة التووريا',
       description: 'دروس إلكترونية تفاعلية بالفيديو والـ PDF لجميع أقسام المنهج',
       features: ['فيديوهات تعليمية', 'ملفات PDF', 'شرح تفصيلي', 'أمثلة عملية'],
       color: 'bg-success',

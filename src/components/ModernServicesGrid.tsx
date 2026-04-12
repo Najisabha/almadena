@@ -4,7 +4,6 @@ import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import { 
   BookOpen, 
-  PenTool, 
   GraduationCap, 
   FileText, 
   Phone, 
@@ -19,27 +18,22 @@ import {
 const ModernServicesGrid = () => {
   const mainServices = [
     {
-      id: 'questions',
+      id: 'theory-hub',
       icon: BookOpen,
-      title: 'بنك الأسئلة التفاعلي',
-      subtitle: 'أسئلة التووري الشاملة',
-      description: 'مكتبة ضخمة من الأسئلة المحدثة والمصنفة بذكاء حسب نوع الرخصة مع شرح مفصل لكل إجابة',
-      features: ['أكثر من 2000 سؤال', 'تصنيف ذكي حسب المواضيع', 'شرح تفصيلي لكل إجابة', 'إحصائيات الأداء'],
-      gradient: 'bg-gradient-to-br from-blue-500 to-blue-700',
+      title: 'أسئلة التووريا والامتحانات التجريبية',
+      subtitle: 'بنك أسئلة ومحاكاة الامتحان الرسمي',
+      description:
+        'أسئلة محدثة حسب نوع الرخصة مع امتحانات تجريبية مقسّمة، وتوقيت مطابق للامتحان الفعلي ونتائج فورية وسجل تقدم على جهازك.',
+      features: [
+        'تصنيف حسب الرخصة من قاعدة البيانات',
+        'دفعات 30 سؤالاً',
+        'توقيت ساعة كاملة',
+        'سجل امتحانات محلي',
+      ],
+      gradient: 'bg-gradient-to-br from-blue-500 to-emerald-600',
       badge: 'الأكثر استخداماً',
-      href: '/questions'
+      href: '/questions',
     },
-    {
-      id: 'exams',
-      icon: PenTool,
-      title: 'محاكي الامتحان الحقيقي',
-      subtitle: 'امتحانات تجريبية',
-      description: 'تجربة مطابقة 100% للامتحان الرسمي مع توقيت زمني دقيق ونتائج فورية مع تحليل الأداء',
-      features: ['محاكاة كاملة للامتحان', '30 سؤال عشوائي', 'توقيت مطابق للامتحان الحقيقي', 'تقرير أداء شامل'],
-      gradient: 'bg-gradient-to-br from-emerald-500 to-emerald-700',
-      badge: 'الأحدث',
-      href: '/exams'
-    }
   ];
 
   const additionalServices = [
@@ -101,7 +95,7 @@ const ModernServicesGrid = () => {
         </div>
 
         {/* Main Services Grid */}
-        <div className="grid md:grid-cols-2 gap-8 mb-16">
+        <div className="max-w-3xl mx-auto mb-16">
           {mainServices.map((service) => (
             <Card key={service.id} className="relative overflow-hidden border-0 shadow-elevated hover:shadow-hero transition-all duration-700 group bg-white">
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5"></div>

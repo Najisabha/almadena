@@ -207,6 +207,31 @@ const statements = [
    ('facebook_url', 'https://facebook.com/almadina', 'url', 'رابط صفحة فيسبوك', TRUE),
    ('instagram_url', 'https://instagram.com/almadina', 'url', 'رابط حساب انستغرام', TRUE)
    ON CONFLICT (setting_key) DO NOTHING;`,
+  `CREATE TABLE IF NOT EXISTS mock_exam_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+    license_code TEXT NOT NULL,
+    license_name_ar TEXT NOT NULL DEFAULT '',
+    exam_number INTEGER NOT NULL DEFAULT 1,
+    score INTEGER NOT NULL DEFAULT 0,
+    total_questions INTEGER NOT NULL DEFAULT 0,
+    percentage NUMERIC(5,2) NOT NULL DEFAULT 0,
+    passed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `CREATE TABLE IF NOT EXISTS student_notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  // Accounts created before students row was required: ensure every role=user has a students row
+  `INSERT INTO students (user_id)
+   SELECT ur.user_id FROM user_roles ur
+   WHERE ur.role = 'user'
+   AND NOT EXISTS (SELECT 1 FROM students s WHERE s.user_id = ur.user_id);`,
 ];
 
 async function seedAdmin() {

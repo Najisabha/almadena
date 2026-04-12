@@ -5,14 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Car, CreditCard, Lock, User, Phone, CheckCircle2, Calendar as CalendarIcon, Home } from 'lucide-react';
+import { Car, CreditCard, Lock, User, Phone, CheckCircle2, Home } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
 import { api as apiClient } from '@/integrations/api/client';
 
 // Palestinian cities and their towns
@@ -34,14 +30,55 @@ const palestinianCities: Record<string, string[]> = {
   'الشمال': ['جباليا', 'بيت لاهيا', 'بيت حانون', 'العطاطرة', 'أم النصر'],
 };
 
-const licenseTypes = [
-  'رخصة سيارة خصوصي (B)',
-  'رخصة سيارة عمومي (C1)',
-  'رخصة شاحنة (C)',
-  'رخصة باص (D)',
-  'رخصة دراجة نارية (A)',
-  'رخصة جرار زراعي (F)',
+/** يطابق صفوف جدول `licenses` في قاعدة البيانات (init-db) */
+type SignupLicense = {
+  id: string;
+  code: string;
+  name_ar: string;
+  display_order: number;
+  is_active?: boolean;
+};
+
+function licenseTypeEmoji(code: string): string {
+  const c = code.trim().toUpperCase();
+  if (c === 'B') return '🚗';
+  if (c === 'C1') return '🚚';
+  if (c === 'C') return '🚛';
+  if (c === 'D1' || c === 'D') return '🚌';
+  if (c === 'A') return '🏍️';
+  if (c === 'T' || c === 'F') return '🚜';
+  return '📋';
+}
+
+/** نفس ترتيب وأسماء seed في `backend/src/scripts/init-db.js` */
+const LICENSES_SEED_FALLBACK: SignupLicense[] = [
+  { id: 'seed-b', code: 'B', name_ar: 'خصوصي', display_order: 1 },
+  { id: 'seed-c1', code: 'C1', name_ar: 'شحن خفيف', display_order: 2 },
+  { id: 'seed-c', code: 'C', name_ar: 'شحن ثقيل', display_order: 3 },
+  { id: 'seed-d1', code: 'D1', name_ar: 'عمومي', display_order: 4 },
+  { id: 'seed-a', code: 'A', name_ar: 'دراجة نارية', display_order: 5 },
+  { id: 'seed-t', code: 'T', name_ar: 'تراكتور', display_order: 6 },
 ];
+
+function digitsOnly(value: string, maxLen: number) {
+  return value.replace(/\D/g, '').slice(0, maxLen);
+}
+
+function parseBirthDateParts(day: string, month: string, year: string): Date | null {
+  if (!day || !month || year.length !== 4) return null;
+  const d = Number(day);
+  const m = Number(month);
+  const y = Number(year);
+  if (!Number.isInteger(d) || !Number.isInteger(m) || !Number.isInteger(y)) return null;
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null;
+  const min = new Date(1940, 0, 1);
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  if (date < min || date > today) return null;
+  return date;
+}
 
 const Auth = () => {
   const { toast } = useToast();
@@ -51,7 +88,9 @@ const Auth = () => {
   const [signupData, setSignupData] = useState({
     firstName: '',
     lastName: '',
-    dateOfBirth: undefined as Date | undefined,
+    birthDay: '',
+    birthMonth: '',
+    birthYear: '',
     idNumber: '',
     phone: '',
     city: '',
@@ -63,6 +102,24 @@ const Auth = () => {
     licenseType: '',
   });
   const [availableTowns, setAvailableTowns] = useState<string[]>([]);
+  const [licenses, setLicenses] = useState<SignupLicense[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await apiClient
+        .from('licenses')
+        .select()
+        .order('display_order', { ascending: true });
+      if (cancelled) return;
+      const rows = (Array.isArray(data) ? data : []) as SignupLicense[];
+      const active = rows.filter((l) => l?.is_active !== false);
+      setLicenses(active.length > 0 ? active : LICENSES_SEED_FALLBACK);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Check if user is already logged in
   useEffect(() => {
@@ -125,25 +182,25 @@ const Auth = () => {
         return;
       }
       
-      if (!signupData.dateOfBirth) {
+      const birthDate = parseBirthDateParts(
+        signupData.birthDay,
+        signupData.birthMonth,
+        signupData.birthYear
+      );
+      if (!birthDate) {
         toast({
           title: "خطأ",
-          description: "يرجى اختيار تاريخ الميلاد",
+          description: "يرجى إدخال تاريخ ميلاد صحيح (اليوم، الشهر، السنة)",
           variant: "destructive"
         });
         setLoading(false);
         return;
       }
       
-      if (!signupData.idImage) {
-        toast({
-          title: "خطأ",
-          description: "يرجى رفع صورة الهوية",
-          variant: "destructive"
-        });
-        setLoading(false);
-        return;
-      }
+      const selectedLicense = licenses.find((l) => l.code === signupData.licenseType);
+      const licenseTypeForProfile = selectedLicense
+        ? `${selectedLicense.name_ar} (${selectedLicense.code})`
+        : signupData.licenseType || null;
 
       const { data, error } = await apiClient.auth.signUp({
         idNumber: signupData.idNumber,
@@ -152,12 +209,12 @@ const Auth = () => {
           data: {
             first_name: signupData.firstName,
             last_name: signupData.lastName,
-            date_of_birth: format(signupData.dateOfBirth, 'yyyy-MM-dd'),
+            date_of_birth: format(birthDate, 'yyyy-MM-dd'),
             phone: signupData.phone,
             city: signupData.city,
             town: signupData.town,
             full_address: signupData.fullAddress,
-            license_type: signupData.licenseType,
+            license_type: licenseTypeForProfile,
           }
         }
       });
@@ -334,37 +391,39 @@ const Auth = () => {
                       </div>
                     </div>
 
-                    {/* Date of Birth */}
+                    {/* Date of Birth — يوم / شهر / سنة (صف واحد، ارتفاع مثل باقي الحقول) */}
                     <div className="space-y-2">
                       <Label className="text-right block">تاريخ الميلاد</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full justify-start text-right font-normal",
-                              !signupData.dateOfBirth && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="ml-2 h-4 w-4" />
-                            {signupData.dateOfBirth ? (
-                              format(signupData.dateOfBirth, "PPP", { locale: ar })
-                            ) : (
-                              <span>اختر تاريخ الميلاد</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={signupData.dateOfBirth}
-                            onSelect={(date) => setSignupData({ ...signupData, dateOfBirth: date })}
-                            disabled={(date) => date > new Date() || date < new Date("1940-01-01")}
-                            initialFocus
-                            className="pointer-events-auto"
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <div
+                        className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.25fr)] gap-2 sm:gap-3"
+                        dir="rtl"
+                      >
+                        {(
+                          [
+                            { key: 'birthDay' as const, label: 'اليوم', maxLen: 2, placeholder: '16', autoComplete: 'bday-day' as const },
+                            { key: 'birthMonth' as const, label: 'الشهر', maxLen: 2, placeholder: '04', autoComplete: 'bday-month' as const },
+                            { key: 'birthYear' as const, label: 'السنة', maxLen: 4, placeholder: '2005', autoComplete: 'bday-year' as const },
+                          ] as const
+                        ).map(({ key, label, maxLen, placeholder, autoComplete }) => (
+                          <div key={key} className="flex min-w-0 flex-col gap-1">
+                            <span className="text-xs text-muted-foreground text-center">{label}</span>
+                            <Input
+                              inputMode="numeric"
+                              autoComplete={autoComplete}
+                              aria-label={label}
+                              placeholder={placeholder}
+                              value={signupData[key]}
+                              onChange={(e) =>
+                                setSignupData({
+                                  ...signupData,
+                                  [key]: digitsOnly(e.target.value, maxLen),
+                                })
+                              }
+                              className="h-10 w-full min-w-0 px-2 text-center tabular-nums sm:px-3"
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Contact Info */}
@@ -452,13 +511,38 @@ const Auth = () => {
                     {/* License Type */}
                     <div className="space-y-2">
                       <Label htmlFor="signup-license" className="text-right block">نوع الرخصة</Label>
-                      <Select value={signupData.licenseType} onValueChange={(value) => setSignupData({ ...signupData, licenseType: value })}>
-                        <SelectTrigger className="text-right">
-                          <SelectValue placeholder="اختر نوع الرخصة" />
+                      <Select
+                        value={signupData.licenseType || undefined}
+                        onValueChange={(value) => setSignupData({ ...signupData, licenseType: value })}
+                        disabled={licenses.length === 0}
+                      >
+                        <SelectTrigger id="signup-license" className="text-right">
+                          <SelectValue
+                            placeholder={
+                              licenses.length === 0 ? 'جاري تحميل أنواع الرخصة…' : 'اختر نوع الرخصة'
+                            }
+                          />
                         </SelectTrigger>
                         <SelectContent>
-                          {licenseTypes.map((type) => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                          {licenses.map((l) => (
+                            <SelectItem
+                              key={l.id}
+                              value={l.code}
+                              textValue={`${l.name_ar} (${l.code})`}
+                              className="text-right"
+                            >
+                              <span
+                                className="inline-flex w-full items-center justify-end gap-2"
+                                dir="rtl"
+                              >
+                                <span>
+                                  {l.name_ar} ({l.code})
+                                </span>
+                                <span aria-hidden className="shrink-0 text-base leading-none">
+                                  {licenseTypeEmoji(l.code)}
+                                </span>
+                              </span>
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -466,7 +550,7 @@ const Auth = () => {
 
                     {/* ID Image Upload */}
                     <div className="space-y-2">
-                      <Label htmlFor="signup-id-image" className="text-right block">صورة الهوية</Label>
+                      <Label htmlFor="signup-id-image" className="text-right block">صورة الهوية (اختياري)</Label>
                       <div className="relative">
                         <Input
                           id="signup-id-image"
@@ -476,7 +560,6 @@ const Auth = () => {
                             const file = e.target.files?.[0] || null;
                             setSignupData({ ...signupData, idImage: file });
                           }}
-                          required
                           className="text-right cursor-pointer file:ml-4 file:rounded-md file:border-0 file:bg-primary file:text-white file:px-4 file:py-2"
                         />
                       </div>

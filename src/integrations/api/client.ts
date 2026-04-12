@@ -54,9 +54,9 @@ function clearSession() {
 async function request<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
   try {
     const token = getToken();
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      ...(init.headers || {}),
+      ...(init.headers as Record<string, string> || {}),
     };
     if (token) {
       headers.Authorization = `Bearer ${token}`;
@@ -273,4 +273,112 @@ export const api = {
   from<T = any>(table: string) {
     return new QueryBuilder<T>(table);
   },
+
+  /** Student dashboard aggregated payload */
+  async getDashboard() {
+    return request<{
+      theory_score: number | null;
+      practical_score: number | null;
+      total_exams: number;
+      passed_exams: number;
+      avg_percentage: number;
+      recent_attempts: ExamAttempt[];
+      rank: number | null;
+      total_students: number;
+    }>("/dashboard");
+  },
+
+  /** Student notifications */
+  async getNotifications() {
+    return request<StudentNotification[]>("/notifications");
+  },
+
+  /** Mark a notification as read */
+  async markNotificationRead(id: string) {
+    return request<{ ok: boolean }>(`/notifications/${id}/read`, { method: "PATCH" });
+  },
+
+  /** Record a completed mock exam attempt */
+  async postExamAttempt(attempt: {
+    license_code: string;
+    license_name_ar: string;
+    exam_number: number;
+    score: number;
+    total_questions: number;
+    percentage: number;
+    passed: boolean;
+  }) {
+    return request<ExamAttempt>("/exam-attempts", {
+      method: "POST",
+      body: JSON.stringify(attempt),
+    });
+  },
+
+  /** Admin: send notification to a specific student */
+  async sendAdminNotification(user_id: string, message: string) {
+    return request<StudentNotification>("/admin/notifications", {
+      method: "POST",
+      body: JSON.stringify({ user_id, message }),
+    });
+  },
+
+  /** Admin: list all students for notification UI */
+  async getAdminStudentsList() {
+    return request<AdminStudent[]>("/admin/students-list");
+  },
+
+  /** Admin: students table + profile fields for إدارة الطلاب */
+  async getAdminStudentsManagement() {
+    return request<AdminStudentManagementRow[]>("/admin/students");
+  },
+};
+
+export type ExamAttempt = {
+  id: string;
+  user_id: string;
+  license_code: string;
+  license_name_ar: string;
+  exam_number: number;
+  score: number;
+  total_questions: number;
+  percentage: number;
+  passed: boolean;
+  created_at: string;
+};
+
+export type StudentNotification = {
+  id: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+};
+
+export type AdminStudent = {
+  /** صف students؛ قد يكون null إن لم يُنشأ بعد */
+  id: string | null;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  license_type: string | null;
+  id_number?: string | null;
+  is_admin?: boolean;
+};
+
+export type AdminStudentManagementRow = {
+  /** معرّف صف جدول students؛ null حتى يُنشأ السجل */
+  id: string | null;
+  user_id: string;
+  id_number?: string | null;
+  is_admin?: boolean;
+  theory_score: number | null;
+  practical_score: number | null;
+  total_exams_taken: number;
+  last_exam_date: string | null;
+  notes: string | null;
+  profiles: {
+    first_name: string;
+    last_name: string;
+    phone: string | null;
+    license_type: string | null;
+  };
 };

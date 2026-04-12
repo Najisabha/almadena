@@ -124,7 +124,25 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  /* Full-width layout + RTL: avoid implicit shrink and odd flex sizing on html/body/#root */
+  html {
+    width: 100%;
+  }
+
   body {
     @apply bg-background text-foreground;
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  #root {
+    width: 100%;
+    min-height: 100%;
+  }
+
+  main {
+    width: 100%;
+    min-width: 0;
   }
 }
