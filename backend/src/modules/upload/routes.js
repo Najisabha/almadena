@@ -4,13 +4,17 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import { authRequired } from "../../auth.js";
+import { adminRequired } from "../../adminAuth.js";
+import { writeIdDocumentBuffer } from "../../lib/idDocumentFiles.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SIGNS_ROOT = path.join(__dirname, "../../../uploads/signs");
-const OPTIONS_ROOT = path.join(__dirname, "../../../uploads/options");
 const LICENSES_ROOT = path.join(__dirname, "../../../uploads/licenses");
-fs.mkdirSync(OPTIONS_ROOT, { recursive: true });
+const SUCCESS_STORIES_ROOT = path.join(__dirname, "../../../uploads/success-stories");
+const INSTRUCTORS_ROOT = path.join(__dirname, "../../../uploads/instructors");
 fs.mkdirSync(LICENSES_ROOT, { recursive: true });
+fs.mkdirSync(SUCCESS_STORIES_ROOT, { recursive: true });
+fs.mkdirSync(INSTRUCTORS_ROOT, { recursive: true });
 
 const SECTION_FOLDER_MAP = {
   warning:          "Warning signals",
@@ -43,6 +47,20 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(new Error("نوع الملف غير مدعوم. الأنواع المسموحة: jpg, png, webp, gif, svg"));
+    }
+  },
+});
+
+const ID_DOC_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+const uploadIdDoc = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (ID_DOC_MIME.has(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("صورة الهوية: jpg أو png أو webp أو gif فقط"));
     }
   },
 });
@@ -80,19 +98,6 @@ export function buildUploadRouter() {
     return res.json({ url });
   });
 
-  // POST /api/upload/options — رفع صورة لخيار إجابة سؤال
-  router.post("/options", authRequired, upload.single("image"), (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ message: "لم يتم إرسال أي ملف صورة" });
-    }
-    const ext = EXT_MAP[req.file.mimetype] || path.extname(req.file.originalname).toLowerCase() || ".png";
-    const filename = `${Date.now()}-${Math.floor(Math.random() * 100000)}${ext}`;
-    const destPath = path.join(OPTIONS_ROOT, filename);
-    fs.writeFileSync(destPath, req.file.buffer);
-    const url = `/uploads/options/${filename}`;
-    return res.json({ url });
-  });
-
   // POST /api/upload/licenses — رفع صورة/أيقونة للرخصة
   router.post("/licenses", authRequired, upload.single("image"), (req, res) => {
     if (!req.file) {
@@ -105,6 +110,71 @@ export function buildUploadRouter() {
     const url = `/uploads/licenses/${filename}`;
     return res.json({ url });
   });
+
+  // POST /api/upload/success-stories — رفع صورة طالب لقصة نجاح (مشرف فقط)
+  router.post("/success-stories", authRequired, upload.single("image"), (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "لم يتم إرسال أي ملف صورة" });
+    }
+    const ext = EXT_MAP[req.file.mimetype] || path.extname(req.file.originalname).toLowerCase() || ".png";
+    const filename = `${Date.now()}-${Math.floor(Math.random() * 100000)}${ext}`;
+    const destPath = path.join(SUCCESS_STORIES_ROOT, filename);
+    fs.writeFileSync(destPath, req.file.buffer);
+    const url = `/uploads/success-stories/${filename}`;
+    return res.json({ url });
+  });
+
+  // POST /api/upload/instructors — صورة المدرب (مسجّل؛ التعديل عبر جدول المدربين للمشرفين)
+  router.post("/instructors", authRequired, upload.single("image"), (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "لم يتم إرسال أي ملف صورة" });
+    }
+    const ext = EXT_MAP[req.file.mimetype] || path.extname(req.file.originalname).toLowerCase() || ".png";
+    const filename = `${Date.now()}-${Math.floor(Math.random() * 100000)}${ext}`;
+    const destPath = path.join(INSTRUCTORS_ROOT, filename);
+    fs.writeFileSync(destPath, req.file.buffer);
+    const url = `/uploads/instructors/${filename}`;
+    return res.json({ url });
+  });
+
+  /**
+   * POST /api/upload/id-document
+   * مشرف فقط: رفع صورة هوية إلى id-documents (نفس مسار التسجيل).
+   */
+  router.post(
+    "/id-document",
+    adminRequired,
+    (req, res, next) => {
+      uploadIdDoc.single("image")(req, res, (err) => {
+        if (err) {
+          if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+            return res.status(400).json({ message: "حجم صورة الهوية كبير جداً (الحد 5 ميجابايت)" });
+          }
+          return res.status(400).json({ message: err.message || "خطأ في رفع صورة الهوية" });
+        }
+        return next();
+      });
+    },
+    (req, res) => {
+      if (!req.file) {
+        return res.status(400).json({ message: "لم يتم إرسال صورة الهوية" });
+      }
+      const idNumber = req.body?.id_number ?? req.body?.idNumber ?? "";
+      try {
+        const url = writeIdDocumentBuffer(
+          req.file.buffer,
+          req.file.mimetype,
+          idNumber,
+          req.file.originalname
+        );
+        return res.json({ data: { url } });
+      } catch (e) {
+        return res.status(400).json({
+          message: e.message || "فشل حفظ صورة الهوية",
+        });
+      }
+    }
+  );
 
   return router;
 }

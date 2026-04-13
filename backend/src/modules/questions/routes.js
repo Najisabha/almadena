@@ -1,19 +1,13 @@
 import express from "express";
 import { query } from "../../db.js";
 import { authRequired } from "../../auth.js";
+import { stripLegacyFromQuestionBody, toPublicQuestion } from "../../lib/questionPublicJson.js";
 
 const VALID_CATEGORIES = ["اشارات مرور", "قوانين", "ميكانيك"];
 const VALID_DIFFICULTIES = ["easy", "medium", "hard"];
 const VALID_ANSWERS = ["A", "B", "C", "D"];
 
 const OPTION_KEYS = ["a", "b", "c", "d"];
-
-// خيار صالح إذا احتوى نصًا أو صورة
-function isOptionValid(text, imageUrl) {
-  const hasText = text && String(text).trim().length > 0;
-  const hasImage = imageUrl && String(imageUrl).trim().length > 0;
-  return hasText || hasImage;
-}
 
 function validateQuestionPayload(payload, partial = false) {
   const { correct_answer, difficulty, category } = payload;
@@ -24,9 +18,8 @@ function validateQuestionPayload(payload, partial = false) {
     }
     for (const k of OPTION_KEYS) {
       const text = payload[`option_${k}`];
-      const img = payload[`option_${k}_image_url`];
-      if (!isOptionValid(text, img)) {
-        throw new Error(`الخيار ${k.toUpperCase()} مطلوب (نص أو صورة)`);
+      if (!text || !String(text).trim()) {
+        throw new Error(`الخيار ${k.toUpperCase()} مطلوب`);
       }
     }
     if (!correct_answer || !VALID_ANSWERS.includes(correct_answer)) {
@@ -48,76 +41,127 @@ function validateQuestionPayload(payload, partial = false) {
 const ALLOWED_UPDATE_FIELDS = [
   "question_text",
   "option_a", "option_b", "option_c", "option_d",
-  "option_a_image_url", "option_b_image_url", "option_c_image_url", "option_d_image_url",
   "correct_answer", "difficulty", "category",
-  "sign_code", "image_url", "is_active", "display_order",
+  "is_active", "display_order",
 ];
+
+const LIST_SQL = `
+  SELECT
+    q.id,
+    q.question_text,
+    q.option_a,
+    q.option_b,
+    q.option_c,
+    q.option_d,
+    q.correct_answer,
+    q.difficulty,
+    q.category,
+    q.is_active,
+    q.display_order,
+    q.created_at,
+    q.updated_at,
+    COALESCE(lic.licenses, '[]') AS licenses
+  FROM questions q
+  LEFT JOIN LATERAL (
+    SELECT json_agg(json_build_object('id', l.id, 'code', l.code, 'name_ar', l.name_ar)) AS licenses
+    FROM question_licenses ql
+    JOIN licenses l ON l.id = ql.license_id
+    WHERE ql.question_id = q.id
+  ) lic ON true
+  ORDER BY q.display_order ASC
+`;
+
+const SINGLE_SQL = `
+  SELECT
+    q.id,
+    q.question_text,
+    q.option_a,
+    q.option_b,
+    q.option_c,
+    q.option_d,
+    q.correct_answer,
+    q.difficulty,
+    q.category,
+    q.is_active,
+    q.display_order,
+    q.created_at,
+    q.updated_at,
+    COALESCE(lic.licenses, '[]') AS licenses
+  FROM questions q
+  LEFT JOIN LATERAL (
+    SELECT json_agg(json_build_object('id', l.id, 'code', l.code, 'name_ar', l.name_ar)) AS licenses
+    FROM question_licenses ql
+    JOIN licenses l ON l.id = ql.license_id
+    WHERE ql.question_id = q.id
+  ) lic ON true
+  WHERE q.id = $1
+`;
+
+const QUESTION_RETURNING_SQL = `
+  id,
+  question_text,
+  option_a,
+  option_b,
+  option_c,
+  option_d,
+  correct_answer,
+  difficulty,
+  category,
+  is_active,
+  display_order,
+  created_at,
+  updated_at
+`.trim();
 
 export function buildQuestionsRouter() {
   const router = express.Router();
 
-  // GET /api/questions
   router.get("/", async (req, res) => {
     try {
-      const sql = `
-        SELECT
-          q.*,
-          COALESCE(
-            json_agg(
-              json_build_object('id', l.id, 'code', l.code, 'name_ar', l.name_ar)
-            ) FILTER (WHERE l.id IS NOT NULL),
-            '[]'
-          ) AS licenses
-        FROM questions q
-        LEFT JOIN question_licenses ql ON ql.question_id = q.id
-        LEFT JOIN licenses l ON l.id = ql.license_id
-        GROUP BY q.id
-        ORDER BY q.display_order ASC
-      `;
-      const data = (await query(sql)).rows;
+      const rows = (await query(LIST_SQL)).rows;
+      const data = rows.map(toPublicQuestion);
+      res.set("Cache-Control", "no-store");
       return res.json({ data });
     } catch (error) {
       return res.status(400).json({ message: "فشل جلب الأسئلة", detail: error.message });
     }
   });
 
-  // POST /api/questions
   router.post("/", authRequired, async (req, res) => {
     try {
-      const { license_ids = [], ...payload } = req.body;
-      validateQuestionPayload(payload);
+      const body = { ...(stripLegacyFromQuestionBody(req.body || {}) || {}) };
+      const license_ids = Array.isArray(body.license_ids) ? body.license_ids : [];
+      delete body.license_ids;
+
+      validateQuestionPayload(body);
 
       const {
         question_text,
         option_a, option_b, option_c, option_d,
-        option_a_image_url, option_b_image_url, option_c_image_url, option_d_image_url,
         correct_answer, difficulty, category,
-        sign_code, image_url, is_active, display_order,
-      } = payload;
+        is_active, display_order,
+      } = body;
 
       const insertResult = await query(
         `INSERT INTO questions
           (question_text,
            option_a, option_b, option_c, option_d,
-           option_a_image_url, option_b_image_url, option_c_image_url, option_d_image_url,
            correct_answer, difficulty, category,
-           sign_code, image_url, is_active, display_order)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-         RETURNING *`,
+           is_active, display_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         RETURNING ${QUESTION_RETURNING_SQL}`,
         [
           question_text,
           option_a ?? "", option_b ?? "", option_c ?? "", option_d ?? "",
-          option_a_image_url ?? null, option_b_image_url ?? null,
-          option_c_image_url ?? null, option_d_image_url ?? null,
           correct_answer, difficulty ?? "medium", category ?? null,
-          sign_code ?? null, image_url ?? null,
           is_active !== undefined ? is_active : true,
           display_order ?? 0,
         ]
       );
+
       const question = insertResult.rows[0];
 
-      if (Array.isArray(license_ids) && license_ids.length > 0) {
+      if (license_ids.length > 0) {
         for (const lid of license_ids) {
           await query(
             `INSERT INTO question_licenses (question_id, license_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -133,11 +177,12 @@ export function buildQuestionsRouter() {
     }
   });
 
-  // PATCH /api/questions/:id
   router.patch("/:id", authRequired, async (req, res) => {
     try {
       const { id } = req.params;
-      const { license_ids, ...payload } = req.body;
+      const rawBody = stripLegacyFromQuestionBody(req.body || {}) || {};
+      const license_ids = rawBody.license_ids;
+      const { license_ids: _l, ...payload } = rawBody;
 
       if (Object.keys(payload).length > 0) {
         validateQuestionPayload(payload, true);
@@ -146,6 +191,7 @@ export function buildQuestionsRouter() {
         if (keys.length > 0) {
           const assignments = keys.map((k, i) => `${k} = $${i + 1}`).join(", ");
           const values = keys.map((k) => payload[k]);
+
           await query(
             `UPDATE questions SET ${assignments}, updated_at = NOW() WHERE id = $${keys.length + 1}`,
             [...values, id]
@@ -170,7 +216,6 @@ export function buildQuestionsRouter() {
     }
   });
 
-  // DELETE /api/questions/:id
   router.delete("/:id", authRequired, async (req, res) => {
     try {
       const { id } = req.params;
@@ -185,21 +230,7 @@ export function buildQuestionsRouter() {
 }
 
 async function fetchQuestionWithLicenses(id) {
-  const sql = `
-    SELECT
-      q.*,
-      COALESCE(
-        json_agg(
-          json_build_object('id', l.id, 'code', l.code, 'name_ar', l.name_ar)
-        ) FILTER (WHERE l.id IS NOT NULL),
-        '[]'
-      ) AS licenses
-    FROM questions q
-    LEFT JOIN question_licenses ql ON ql.question_id = q.id
-    LEFT JOIN licenses l ON l.id = ql.license_id
-    WHERE q.id = $1
-    GROUP BY q.id
-  `;
-  const result = await query(sql, [id]);
-  return result.rows[0] || null;
+  const result = await query(SINGLE_SQL, [id]);
+  const row = result.rows[0];
+  return row ? toPublicQuestion(row) : null;
 }
