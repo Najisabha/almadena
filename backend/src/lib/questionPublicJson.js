@@ -10,6 +10,8 @@ export const QUESTION_PUBLIC_KEYS = [
   "option_c",
   "option_d",
   "correct_answer",
+  "supplemental_wrong_answer",
+  "supplemental_answer_changed_emergency",
   "difficulty",
   "category",
   "is_active",

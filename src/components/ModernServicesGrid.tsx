@@ -9,9 +9,6 @@ import {
   Phone, 
   Trophy,
   ArrowLeft,
-  Star,
-  Users,
-  Clock,
   CheckCircle2
 } from 'lucide-react';
 
@@ -39,11 +36,11 @@ const ModernServicesGrid = () => {
   const additionalServices = [
     {
       icon: GraduationCap,
-      title: 'الدروس التفاعلية',
-      description: 'مواد تعليمية شاملة بالفيديو والنصوص',
+      title: 'متطلبات الرخصة',
+      description: 'شروط وأنواع الرخص وساعات التدريب المحدثة من الإدارة',
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
-      href: '/study'
+      href: '/license-requirements'
     },
     {
       icon: FileText,
@@ -59,23 +56,16 @@ const ModernServicesGrid = () => {
       description: 'تتبع تقدمك ونتائجك بشكل تفصيلي',
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-50',
-      href: '/results'
+      href: '/student-results'
     },
     {
       icon: Phone,
       title: 'الدعم والمساعدة',
-      description: 'فريق دعم متاح على مدار الساعة',
+      description: 'تواصل معنا عبر صفحة الاتصال للاستفسار والمتابعة',
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
       href: '/contact'
     }
-  ];
-
-  const stats = [
-    { icon: Users, value: '+12,000', label: 'طالب ناجح', color: 'text-primary' },
-    { icon: Trophy, value: '97%', label: 'نسبة النجاح', color: 'text-emerald-600' },
-    { icon: Star, value: '4.9/5', label: 'تقييم المستخدمين', color: 'text-yellow-500' },
-    { icon: Clock, value: '24/7', label: 'دعم متواصل', color: 'text-blue-500' }
   ];
 
   return (
@@ -90,7 +80,7 @@ const ModernServicesGrid = () => {
             منصة <span className="bg-gradient-primary bg-clip-text text-transparent">شاملة</span> لتعلم القيادة
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            اكتشف مجموعة الخدمات المتقدمة التي نقدمها لضمان نجاحك في الحصول على رخصة القيادة من المحاولة الأولى
+            اكتشف الخدمات التي تساعدك على الاستعداد لرخصة القيادة والامتحانات
           </p>
         </div>
 
@@ -167,25 +157,6 @@ const ModernServicesGrid = () => {
               </Card>
             </Link>
           ))}
-        </div>
-
-        {/* Stats */}
-        <div className="bg-white rounded-3xl shadow-elevated p-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((stat, index) => (
-              <div key={index} className="text-center">
-                <div className={`${stat.color} w-12 h-12 rounded-xl bg-current/10 flex items-center justify-center mx-auto mb-4`}>
-                  <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                </div>
-                <div className={`text-3xl font-bold ${stat.color} mb-2`}>
-                  {stat.value}
-                </div>
-                <div className="text-muted-foreground text-sm">
-                  {stat.label}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </section>

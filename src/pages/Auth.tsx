@@ -10,27 +10,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { api as apiClient } from '@/integrations/api/client';
+import { fetchSignupPlacesMap, type PlacesMap } from '@/features/signupPlaces/signupPlaces.service';
 
-// Palestinian cities and their towns
-const palestinianCities: Record<string, string[]> = {
-  'القدس': ['القدس القديمة', 'شعفاط', 'العيزرية', 'أبو دبس', 'السواحرة', 'سلوان', 'الطور', 'صور باهر'],
-  'رام الله': ['رام الله', 'البيرة', 'بيتونيا', 'بيت لقيا', 'دير عمار', 'عين يبرود', 'سلواد', 'ترمسعيا'],
-  'الخليل': ['الخليل', 'دورا', 'يطا', 'حلحول', 'السموع', 'بني نعيم', 'سعير', 'تفوح', 'ذهرية'],
-  'بيت لحم': ['بيت لحم', 'بيت جالا', 'بيت ساحور', 'الخضر', 'تقوع', 'العبيدية', 'الدوحة'],
-  'نابلس': ['نابلس', 'حوارة', 'بيتا', 'عصيرة الشمالية', 'رفيديا', 'بلاطة', 'عسكر', 'عقربا'],
-  'جنين': ['جنين', 'يعبد', 'عرابة', 'قباطية', 'برقين', 'سيلة الحارثية', 'الزبابدة', 'جلبون'],
-  'طولكرم': ['طولكرم', 'قلقيلية', 'عزون', 'جيوس', 'بلعا', 'علار', 'ذنابة', 'عنبتا'],
-  'قلقيلية': ['قلقيلية', 'عزون', 'حبلة', 'كفر ثلث', 'جيوس', 'النبي إلياس'],
-  'سلفيت': ['سلفيت', 'بديا', 'كفل حارس', 'ديرستيا', 'حارس', 'قيرة', 'الزاوية'],
-  'أريحا': ['أريحا', 'العوجا', 'فصايل', 'مرج نعجة', 'عين السلطان'],
-  'غزة': ['غزة', 'جباليا', 'بيت حانون', 'بيت لاهيا', 'الشجاعية', 'الزيتون', 'النصيرات'],
-  'خان يونس': ['خان يونس', 'بني سهيلا', 'عبسان', 'القرارة', 'خزاعة', 'المعن'],
-  'رفح': ['رفح', 'الشوكة', 'البيوك', 'تل السلطان'],
-  'دير البلح': ['دير البلح', 'الزوايدة', 'المغازي', 'البريج'],
-  'الشمال': ['جباليا', 'بيت لاهيا', 'بيت حانون', 'العطاطرة', 'أم النصر'],
-};
-
-/** يطابق صفوف جدول `licenses` في قاعدة البيانات (init-db) */
+/** صفوف جدول `licenses` من قاعدة البيانات */
 type SignupLicense = {
   id: string;
   code: string;
@@ -50,18 +32,28 @@ function licenseTypeEmoji(code: string): string {
   return '📋';
 }
 
-/** نفس ترتيب وأسماء seed في `backend/src/scripts/init-db.js` */
-const LICENSES_SEED_FALLBACK: SignupLicense[] = [
-  { id: 'seed-b', code: 'B', name_ar: 'خصوصي', display_order: 1 },
-  { id: 'seed-c1', code: 'C1', name_ar: 'شحن خفيف', display_order: 2 },
-  { id: 'seed-c', code: 'C', name_ar: 'شحن ثقيل', display_order: 3 },
-  { id: 'seed-d1', code: 'D1', name_ar: 'عمومي', display_order: 4 },
-  { id: 'seed-a', code: 'A', name_ar: 'دراجة نارية', display_order: 5 },
-  { id: 'seed-t', code: 'T', name_ar: 'تراكتور', display_order: 6 },
-];
-
 function digitsOnly(value: string, maxLen: number) {
   return value.replace(/\D/g, '').slice(0, maxLen);
+}
+
+function stripBidiAndEmbedding(value: string): string {
+  return value.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '');
+}
+
+/** تحويل ٠–٩ (عربي/فارسي) إلى 0–9 ليطابق التخزين في الخادم */
+function toLatinDigits(value: string): string {
+  let out = '';
+  for (const c of value) {
+    const code = c.charCodeAt(0);
+    if (code >= 0x0660 && code <= 0x0669) out += String(code - 0x0660);
+    else if (code >= 0x06f0 && code <= 0x06f9) out += String(code - 0x06f0);
+    else out += c;
+  }
+  return out;
+}
+
+function normalizeIdNumberInput(raw: string, maxLen: number) {
+  return digitsOnly(toLatinDigits(stripBidiAndEmbedding(raw)), maxLen);
 }
 
 function parseBirthDateParts(day: string, month: string, year: string): Date | null {
@@ -103,18 +95,43 @@ const Auth = () => {
   });
   const [availableTowns, setAvailableTowns] = useState<string[]>([]);
   const [licenses, setLicenses] = useState<SignupLicense[]>([]);
+  const [licensesLoaded, setLicensesLoaded] = useState(false);
+  const [places, setPlaces] = useState<PlacesMap>({});
+  const [placesReady, setPlacesReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await apiClient
-        .from('licenses')
-        .select()
-        .order('display_order', { ascending: true });
-      if (cancelled) return;
-      const rows = (Array.isArray(data) ? data : []) as SignupLicense[];
-      const active = rows.filter((l) => l?.is_active !== false);
-      setLicenses(active.length > 0 ? active : LICENSES_SEED_FALLBACK);
+      try {
+        const { data } = await apiClient
+          .from('licenses')
+          .select()
+          .order('display_order', { ascending: true });
+        if (cancelled) return;
+        const rows = (Array.isArray(data) ? data : []) as SignupLicense[];
+        const active = rows.filter((l) => l?.is_active !== false);
+        setLicenses(active);
+      } finally {
+        if (!cancelled) setLicensesLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await fetchSignupPlacesMap();
+        if (cancelled) return;
+        setPlaces(data ?? {});
+      } catch {
+        if (!cancelled) setPlaces({});
+      } finally {
+        if (!cancelled) setPlacesReady(true);
+      }
     })();
     return () => {
       cancelled = true;
@@ -163,7 +180,7 @@ const Auth = () => {
 
   const handleCityChange = (city: string) => {
     setSignupData({ ...signupData, city, town: '' });
-    setAvailableTowns(palestinianCities[city] || []);
+    setAvailableTowns(places[city] || []);
   };
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -177,6 +194,26 @@ const Auth = () => {
           title: "خطأ",
           description: "كلمتا المرور غير متطابقتين",
           variant: "destructive"
+        });
+        setLoading(false);
+        return;
+      }
+
+      if (licenses.length === 0) {
+        toast({
+          title: "التسجيل غير متاح حالياً",
+          description: "لم تُضبط أنواع الرخص بعد. يرجى التواصل مع الإدارة.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      if (!signupData.licenseType.trim()) {
+        toast({
+          title: "خطأ",
+          description: "يرجى اختيار نوع الرخصة",
+          variant: "destructive",
         });
         setLoading(false);
         return;
@@ -205,6 +242,7 @@ const Auth = () => {
       const { data, error } = await apiClient.auth.signUp({
         idNumber: signupData.idNumber,
         password: signupData.password,
+        idImageFile: signupData.idImage,
         options: {
           data: {
             first_name: signupData.firstName,
@@ -264,10 +302,10 @@ const Auth = () => {
 
             <div className="space-y-4">
               <h2 className="text-4xl font-bold text-foreground">
-                انضم إلى أكثر من <span className="text-primary">10,000</span> طالب ناجح
+                ابدأ رحلتك نحو رخصة القيادة
               </h2>
               <p className="text-xl text-muted-foreground">
-                ابدأ رحلتك نحو الحصول على رخصة القيادة بأفضل الأدوات التعليمية
+                تسجيل ووصول إلى المواد والامتحانات وفق ما تتيحه الأكاديمية
               </p>
             </div>
 
@@ -282,20 +320,6 @@ const Auth = () => {
               ))}
             </div>
 
-            <div className="grid grid-cols-3 gap-6">
-              <div className="text-center p-4 rounded-xl bg-white shadow-card">
-                <div className="text-2xl font-bold text-primary">95%</div>
-                <div className="text-xs text-muted-foreground">نسبة النجاح</div>
-              </div>
-              <div className="text-center p-4 rounded-xl bg-white shadow-card">
-                <div className="text-2xl font-bold text-primary">2000+</div>
-                <div className="text-xs text-muted-foreground">سؤال</div>
-              </div>
-              <div className="text-center p-4 rounded-xl bg-white shadow-card">
-                <div className="text-2xl font-bold text-primary">24/7</div>
-                <div className="text-xs text-muted-foreground">دعم</div>
-              </div>
-            </div>
           </div>
 
           {/* Right Side - Auth Forms */}
@@ -321,11 +345,18 @@ const Auth = () => {
                         <Input
                           id="login-id"
                           type="text"
+                          inputMode="numeric"
+                          autoComplete="username"
                           placeholder="أدخل رقم الهوية"
                           value={loginData.idNumber}
-                          onChange={(e) => setLoginData({ ...loginData, idNumber: e.target.value })}
+                          onChange={(e) =>
+                            setLoginData({
+                              ...loginData,
+                              idNumber: normalizeIdNumberInput(e.target.value, 12),
+                            })
+                          }
                           required
-                          className="pr-10 text-right"
+                          className="pr-10 text-right tabular-nums"
                         />
                       </div>
                     </div>
@@ -450,23 +481,30 @@ const Auth = () => {
                         <Input
                           id="signup-id-number"
                           type="text"
+                          inputMode="numeric"
+                          autoComplete="off"
                           placeholder="أدخل رقم الهوية"
                           value={signupData.idNumber}
-                          onChange={(e) => setSignupData({ ...signupData, idNumber: e.target.value })}
+                          onChange={(e) =>
+                            setSignupData({
+                              ...signupData,
+                              idNumber: normalizeIdNumberInput(e.target.value, 12),
+                            })
+                          }
                           required
-                          className="pr-10 text-right"
+                          className="pr-10 text-right tabular-nums"
                         />
                       </div>
                     </div>
 
-                    {/* Location */}
+                    {/* Location — القائمة من قاعدة البيانات (site_settings.signup_places) */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="signup-town" className="text-right block">اسم البلدة</Label>
                         <Select 
                           value={signupData.town} 
                           onValueChange={(value) => setSignupData({ ...signupData, town: value })}
-                          disabled={!signupData.city}
+                          disabled={!placesReady || !signupData.city}
                         >
                           <SelectTrigger className="text-right">
                             <SelectValue placeholder="اختر البلدة" />
@@ -480,18 +518,23 @@ const Auth = () => {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="signup-city" className="text-right block">اسم المدينة</Label>
-                        <Select value={signupData.city} onValueChange={handleCityChange}>
+                        <Select value={signupData.city} onValueChange={handleCityChange} disabled={!placesReady}>
                           <SelectTrigger className="text-right">
-                            <SelectValue placeholder="اختر المدينة" />
+                            <SelectValue placeholder={placesReady ? 'اختر المدينة' : 'جاري التحميل...'} />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.keys(palestinianCities).map((city) => (
+                            {Object.keys(places).map((city) => (
                               <SelectItem key={city} value={city}>{city}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
+                    {placesReady && Object.keys(places).length === 0 && (
+                      <p className="text-sm text-muted-foreground text-right">
+                        لا توجد مدن مُعرّفة حالياً. يرجى التواصل مع الأكاديمية أو المحاولة لاحقاً.
+                      </p>
+                    )}
 
                     <div className="space-y-2">
                       <Label htmlFor="signup-address" className="text-right block">العنوان الكامل</Label>
@@ -514,12 +557,16 @@ const Auth = () => {
                       <Select
                         value={signupData.licenseType || undefined}
                         onValueChange={(value) => setSignupData({ ...signupData, licenseType: value })}
-                        disabled={licenses.length === 0}
+                        disabled={!licensesLoaded || licenses.length === 0}
                       >
                         <SelectTrigger id="signup-license" className="text-right">
                           <SelectValue
                             placeholder={
-                              licenses.length === 0 ? 'جاري تحميل أنواع الرخصة…' : 'اختر نوع الرخصة'
+                              !licensesLoaded
+                                ? 'جاري تحميل أنواع الرخصة…'
+                                : licenses.length === 0
+                                  ? 'لا تتوفر أنواع رخص حالياً'
+                                  : 'اختر نوع الرخصة'
                             }
                           />
                         </SelectTrigger>
@@ -546,6 +593,11 @@ const Auth = () => {
                           ))}
                         </SelectContent>
                       </Select>
+                      {licensesLoaded && licenses.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-right">
+                          لا توجد رخص مفعّلة للتسجيل. يرجى التواصل مع الإدارة.
+                        </p>
+                      )}
                     </div>
 
                     {/* ID Image Upload */}
@@ -603,7 +655,12 @@ const Auth = () => {
                       </div>
                     </div>
 
-                    <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      size="lg"
+                      disabled={loading || !licensesLoaded || licenses.length === 0}
+                    >
                       {loading ? 'جاري إنشاء الحساب...' : 'إنشاء حساب'}
                     </Button>
                   </form>

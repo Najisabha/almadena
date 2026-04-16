@@ -3,17 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Car, 
-  Truck, 
-  Bus, 
-  Bike, 
-  Tractor, 
-  Trophy, 
-  BookOpen, 
+import {
+  Car,
+  Truck,
+  Bus,
+  Bike,
+  Tractor,
+  Trophy,
+  BookOpen,
   Target,
   ChevronRight,
-  CheckCircle2
+  CheckCircle2,
 } from 'lucide-react';
 import { api as apiClient } from '@/integrations/api/client';
 
@@ -47,6 +47,20 @@ const Questions = () => {
   const [licenses, setLicenses] = useState<License[]>([]);
   const [questions, setQuestions] = useState<QuestionWithLicenses[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const startRegularExam = (code: string) => {
+    if (code.toUpperCase() === 'B') {
+      navigate('/questions/private');
+      return;
+    }
+    navigate(`/mock-exam?category=${code}&difficulty=medium&exam=1`);
+  };
+
+  const startSupplementalExam = (code: string, nameAr: string) => {
+    navigate(
+      `/questions/exams?license=${encodeURIComponent(code)}&name=${encodeURIComponent(nameAr)}&examMode=supplemental`
+    );
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -206,11 +220,7 @@ const Questions = () => {
                 <Card 
                   key={category.id}
                   className="group hover:shadow-elevated transition-all duration-300 cursor-pointer border-2 hover:border-primary/50 bg-white/80 backdrop-blur-sm"
-                  onClick={() =>
-                    category.code.toUpperCase() === 'B'
-                      ? navigate('/questions/private')
-                      : navigate(`/mock-exam?category=${category.code}&difficulty=medium&exam=1`)
-                  }
+                  onClick={() => startRegularExam(category.code)}
                 >
                   <CardHeader>
                     <div className="flex items-start justify-between mb-4">
@@ -259,56 +269,75 @@ const Questions = () => {
         </div>
       </section>
 
-      {/* Study Materials Section */}
-      <section className="py-16 bg-gradient-card border-t border-border/50">
+      {/* Supplemental Exams Section */}
+      <section className="py-16 border-t border-border/40 bg-white/40">
         <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">
-                مواد دراسية إضافية
-              </h2>
-              <p className="text-xl text-muted-foreground">
-                استفد من المواد التعليمية لتحسين فرص نجاحك
-              </p>
-            </div>
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">
+              الامتحانات الاستكمالية
+            </h2>
+            <p className="text-xl text-muted-foreground">
+              نفس أسئلة الرخصة بخيارين فقط: إجابة صحيحة + إجابة خاطئة واحدة
+            </p>
+          </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
-              <Card className="border-2 hover:border-primary/50 transition-all duration-300 bg-white/80 backdrop-blur-sm">
-                <CardHeader>
-                  <div className="p-4 rounded-xl bg-gradient-primary w-fit mb-4">
-                    <Target className="h-8 w-8 text-white" />
-                  </div>
-                  <CardTitle className="text-right">إشارات المرور</CardTitle>
-                  <CardDescription className="text-right">
-                    تعلم جميع إشارات المرور الرسمية مع الشرح التفصيلي
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button className="w-full" variant="outline" onClick={() => navigate("/signs")}>
-                    <span>تصفح الإشارات</span>
-                    <ChevronRight className="mr-2 h-4 w-4" />
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="border-2 hover:border-primary/50 transition-all duration-300 bg-white/80 backdrop-blur-sm">
-                <CardHeader>
-                  <div className="p-4 rounded-xl bg-gradient-primary w-fit mb-4">
-                    <BookOpen className="h-8 w-8 text-white" />
-                  </div>
-                  <CardTitle className="text-right">كتاب التؤوريا</CardTitle>
-                  <CardDescription className="text-right">
-                    الكتاب الرسمي الكامل لقوانين السير والمرور
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button className="w-full" variant="outline">
-                    <span>تحميل الكتاب</span>
-                    <ChevronRight className="mr-2 h-4 w-4" />
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            {!isLoading && categories.length === 0 && (
+              <div className="col-span-full text-center py-10 text-muted-foreground">
+                لا توجد رخص مفعلة حالياً لعرض الامتحانات الاستكمالية.
+              </div>
+            )}
+            {categories.map((category) => {
+              const Icon = category.icon;
+              return (
+                <Card
+                  key={`${category.id}-supplemental`}
+                  className="group hover:shadow-elevated transition-all duration-300 cursor-pointer border-2 hover:border-primary/50 bg-white/80 backdrop-blur-sm"
+                  onClick={() => startSupplementalExam(category.code, category.title.replace('أسئلة تؤوريا ', ''))}
+                >
+                  <CardHeader>
+                    <div className="flex items-start justify-between mb-4">
+                      <div
+                        className="p-4 rounded-xl group-hover:scale-110 transition-transform duration-300"
+                        style={{ backgroundColor: category.bgColor }}
+                      >
+                        {category.iconUrl ? (
+                          <img
+                            src={category.iconUrl}
+                            alt={category.title}
+                            className="h-8 w-8 object-contain"
+                          />
+                        ) : (
+                          <Icon className={`h-8 w-8 ${category.color}`} />
+                        )}
+                      </div>
+                      <Badge variant="secondary" className="bg-primary/10 text-primary">
+                        {category.questions} سؤال
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-xl text-right mb-2">
+                      {`استكمالي ${category.title}`}
+                    </CardTitle>
+                    <CardDescription className="text-right text-base">
+                      {`امتحان استكمالي لرخصة ${category.title.replace('أسئلة تؤوريا ', '')}`}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-sm text-muted-foreground">المستوى:</span>
+                      <Badge variant="outline">{category.difficulty}</Badge>
+                    </div>
+                    <Button
+                      className="w-full group-hover:bg-primary group-hover:text-white transition-all duration-300"
+                      variant="outline"
+                    >
+                      <span>ابدأ الاستكمالي</span>
+                      <ChevronRight className="mr-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </section>

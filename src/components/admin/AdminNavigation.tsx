@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Users, Trophy, FileText, DollarSign, Calendar, BookOpen, Settings, TrafficCone, IdCard, Bell } from 'lucide-react';
+import { Users, Trophy, FileText, Settings, TrafficCone, IdCard, Bell, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const AdminNavigation = () => {
@@ -9,11 +9,9 @@ const AdminNavigation = () => {
     { title: 'الطلاب', href: '/admin/students', icon: Users },
     { title: 'الإشعارات', href: '/admin/notifications', icon: Bell },
     { title: 'قصص النجاح', href: '/admin/success-stories', icon: Trophy },
+    { title: 'المدربين', href: '/admin/instructors', icon: GraduationCap },
     { title: 'الأسئلة', href: '/admin/questions', icon: FileText },
     { title: 'الرخص', href: '/admin/licenses', icon: IdCard },
-    { title: 'الأسعار', href: '/admin/pricing', icon: DollarSign },
-    { title: 'المواعيد', href: '/admin/appointments', icon: Calendar },
-    { title: 'المواد الدراسية', href: '/admin/materials', icon: BookOpen },
     { title: 'الإشارات', href: '/admin/signs', icon: TrafficCone },
     { title: 'إعدادات الموقع', href: '/admin/settings', icon: Settings },
   ];
@@ -25,7 +23,7 @@ const AdminNavigation = () => {
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.href;
-            
+
             return (
               <Link
                 key={item.href}

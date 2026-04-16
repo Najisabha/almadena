@@ -30,6 +30,12 @@ import { api as apiClient } from "@/integrations/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavbarConfig } from "@/features/siteSettings/useNavbarConfig";
 import { NavbarItemConfig } from "@/features/siteSettings/navbar.types";
+import {
+  LicenseCatalogIconBox,
+  getLicenseTileBgClassByCode,
+  isLikelyHexColor,
+  resolveImageUrl,
+} from "@/components/license/LicenseCatalogIconBox";
 import { cn } from "@/lib/utils";
 
 type License = {
@@ -53,16 +59,6 @@ const DIFFICULTY_OPTIONS: DifficultyOption[] = [
   { value: "hard",   label: "صعب",     description: "30 سؤالاً من الأسئلة الصعبة" },
   { value: "random", label: "عشوائي",  description: "30 سؤالاً عشوائياً من جميع المستويات" },
 ];
-
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000";
-
-function resolveImageUrl(url?: string | null): string {
-  if (!url) return "";
-  const clean = String(url).trim();
-  if (/^https?:\/\//i.test(clean)) return clean;
-  if (clean.startsWith("//")) return `https:${clean}`;
-  return `${API_BASE}${clean.startsWith("/") ? "" : "/"}${clean}`;
-}
 
 type SessionUser = {
   id: string;
@@ -682,21 +678,16 @@ const Navigation = () => {
                   }}
                   className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all duration-200 text-right"
                 >
-                  {license.icon_url ? (
-                    <img
-                      src={resolveImageUrl(license.icon_url)}
-                      alt={license.name_ar}
-                      className="h-10 w-10 object-contain rounded-lg"
-                      style={{ backgroundColor: license.bg_color || "#f3f4f6" }}
-                    />
-                  ) : (
-                    <div
-                      className="h-10 w-10 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: license.bg_color || "#f3f4f6" }}
-                    >
-                      <Car className="h-5 w-5 text-white" />
-                    </div>
-                  )}
+                  <LicenseCatalogIconBox
+                    iconUrl={resolveImageUrl(license.icon_url)}
+                    bgHex={
+                      license.bg_color && isLikelyHexColor(license.bg_color)
+                        ? license.bg_color.trim()
+                        : null
+                    }
+                    tileBgClass={getLicenseTileBgClassByCode(license.code)}
+                    licenseCode={license.code}
+                  />
                   <span className="font-semibold text-sm">{license.name_ar}</span>
                   <span className="text-xs text-muted-foreground">({license.code})</span>
                 </button>

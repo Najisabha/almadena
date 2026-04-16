@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,6 @@ import {
   Plus,
   Eye,
   EyeOff,
-  ImagePlus,
   X,
   CheckCircle2,
   Search,
@@ -32,6 +31,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api as apiClient } from '@/integrations/api/client';
 
@@ -82,15 +82,11 @@ interface Question {
   option_b: string;
   option_c: string;
   option_d: string;
-  option_a_image_url: string | null;
-  option_b_image_url: string | null;
-  option_c_image_url: string | null;
-  option_d_image_url: string | null;
   correct_answer: OptionLetter;
+  supplemental_wrong_answer?: OptionLetter | null;
+  supplemental_answer_changed_emergency?: boolean;
   difficulty: string;
   category: Category | null;
-  sign_code: string | null;
-  image_url: string | null;
   is_active: boolean;
   licenses: License[];
 }
@@ -101,14 +97,11 @@ type FormData = {
   option_b: string;
   option_c: string;
   option_d: string;
-  option_a_image_url: string;
-  option_b_image_url: string;
-  option_c_image_url: string;
-  option_d_image_url: string;
   correct_answer: OptionLetter;
+  supplemental_wrong_answer: OptionLetter | '';
+  supplemental_answer_changed_emergency: boolean;
   difficulty: string;
   category: string;
-  sign_code: string;
   license_ids: string[];
 };
 
@@ -135,229 +128,56 @@ async function apiRequest<T>(
   }
 }
 
-async function uploadOptionImage(file: File): Promise<string> {
-  const token = getToken();
-  const fd = new FormData();
-  fd.append('image', file);
-  const response = await fetch(`${API_BASE}/upload/options`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: fd,
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message || 'فشل رفع الصورة');
-  return data.url as string;
-}
-
 // ─────────────────────────────────────────────────────────────────
-// Combobox الشواخص — مبني بـ React خالص، بدون Radix Portal
-// حتى لا يتعارض مع Dialog
-// ─────────────────────────────────────────────────────────────────
-interface SignComboboxProps {
-  signs: TrafficSign[];
-  value: string;
-  onChange: (code: string) => void;
-}
-
-const SignCombobox = ({ signs, value, onChange }: SignComboboxProps) => {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const selected = signs.find((s) => s.sign_code === value) ?? null;
-
-  const filtered = query.trim()
-    ? signs.filter(
-        (s) =>
-          s.sign_code.toLowerCase().includes(query.toLowerCase()) ||
-          s.title.toLowerCase().includes(query.toLowerCase())
-      )
-    : signs;
-
-  const handleSelect = useCallback(
-    (code: string) => {
-      onChange(code);
-      setQuery('');
-      setOpen(false);
-    },
-    [onChange]
-  );
-
-  // إغلاق عند الضغط خارج المكوّن
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setQuery('');
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  return (
-    <div ref={containerRef} className="relative mt-1">
-      {/* حقل بحث مباشر بدون زر */}
-      <div className="relative">
-        <input
-          ref={inputRef}
-          value={query}
-          onFocus={() => setOpen(true)}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-          }}
-          placeholder={selected ? `[${selected.sign_code}] ${selected.title}` : 'ابحث عن شاخصة...'}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-        />
-      </div>
-
-      {/* القائمة المنسدلة */}
-      {open && (
-        <div className="absolute z-[200] mt-1 w-full rounded-md border bg-popover shadow-lg overflow-hidden">
-          <div className="max-h-64 overflow-y-auto">
-            {/* بدون شاخصة */}
-            <button
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); handleSelect(''); }}
-              className="w-full text-right px-3 py-2 text-sm text-muted-foreground hover:bg-accent transition-colors"
-            >
-              — بدون شاخصة —
-            </button>
-
-            {filtered.length === 0 && (
-              <p className="px-3 py-4 text-center text-sm text-muted-foreground">لا توجد نتائج</p>
-            )}
-
-            {filtered.map((s) => (
-              <button
-                key={s.sign_code}
-                type="button"
-                onMouseDown={(e) => { e.preventDefault(); handleSelect(s.sign_code); }}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-right hover:bg-accent transition-colors ${
-                  s.sign_code === value ? 'bg-accent/60 font-semibold' : ''
-                }`}
-              >
-                <img
-                  src={resolveImageUrl(s.image_url)}
-                  alt={s.title}
-                  className="h-8 w-8 object-contain rounded border bg-white shrink-0"
-                />
-                <span className="truncate">
-                  <span className="text-primary font-mono text-xs ml-1">[{s.sign_code}]</span>
-                  {s.title}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────
-// مكوّن إدخال الخيار (نص + صورة)
+// مكوّن إدخال الخيار (نص فقط)
 // ─────────────────────────────────────────────────────────────────
 interface OptionInputProps {
   letter: OptionLetter;
   text: string;
-  imageUrl: string;
   isCorrect: boolean;
   onTextChange: (val: string) => void;
-  onImageChange: (url: string) => void;
   onSelectCorrect: () => void;
 }
 
 const OptionInput = ({
-  letter, text, imageUrl, isCorrect, onTextChange, onImageChange, onSelectCorrect,
-}: OptionInputProps) => {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
-  const [uploading, setUploading] = useState(false);
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const url = await uploadOptionImage(file);
-      onImageChange(url);
-    } catch (err: any) {
-      toast({ title: 'خطأ', description: err.message, variant: 'destructive' });
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
-    }
-  };
-
-  return (
-    <div
-      className={`relative rounded-xl border-2 p-3 transition-all ${
-        isCorrect ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-border bg-card'
-      }`}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span
-          className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${
-            isCorrect ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'
-          }`}
-        >
-          {letter}
-        </span>
-        <button
-          type="button"
-          title="اضغط لتعيين هذا الخيار كإجابة صحيحة"
-          onClick={onSelectCorrect}
-          className={`text-xs flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ${
-            isCorrect
-              ? 'bg-green-500 text-white'
-              : 'bg-muted text-muted-foreground hover:bg-green-100 hover:text-green-700'
-          }`}
-        >
-          <CheckCircle2 className="w-3 h-3" />
-          {isCorrect ? 'صحيح ✓' : 'صحيح'}
-        </button>
-      </div>
-
-      <Input
-        placeholder={`نص الخيار ${letter}...`}
-        value={text}
-        onChange={(e) => onTextChange(e.target.value)}
-        className="mb-2 text-sm"
-      />
-
-      {imageUrl ? (
-        <div className="relative inline-block">
-          <img
-            src={resolveImageUrl(imageUrl)}
-            alt={`خيار ${letter}`}
-            className="h-16 w-auto rounded-lg border object-contain"
-          />
-          <button
-            type="button"
-            onClick={() => onImageChange('')}
-            className="absolute -top-2 -right-2 bg-destructive text-white rounded-full p-0.5"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
-        >
-          <ImagePlus className="w-4 h-4" />
-          {uploading ? 'جاري الرفع...' : 'إضافة صورة'}
-        </button>
-      )}
-      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+  letter, text, isCorrect, onTextChange, onSelectCorrect,
+}: OptionInputProps) => (
+  <div
+    className={`relative rounded-xl border-2 p-3 transition-all ${
+      isCorrect ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-border bg-card'
+    }`}
+  >
+    <div className="flex items-center justify-between mb-2">
+      <span
+        className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${
+          isCorrect ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'
+        }`}
+      >
+        {letter}
+      </span>
+      <button
+        type="button"
+        title="اضغط لتعيين هذا الخيار كإجابة صحيحة"
+        onClick={onSelectCorrect}
+        className={`text-xs flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ${
+          isCorrect
+            ? 'bg-green-500 text-white'
+            : 'bg-muted text-muted-foreground hover:bg-green-100 hover:text-green-700'
+        }`}
+      >
+        <CheckCircle2 className="w-3 h-3" />
+        {isCorrect ? 'صحيح ✓' : 'صحيح'}
+      </button>
     </div>
-  );
-};
+
+    <Input
+      placeholder={`نص الخيار ${letter}...`}
+      value={text}
+      onChange={(e) => onTextChange(e.target.value)}
+      className="text-sm"
+    />
+  </div>
+);
 
 // ─────────────────────────────────────────────────────────────────
 // دالة تحليل نص السؤال: تُعيد مصفوفة من أجزاء (نص | رمز شاخصة)
@@ -378,15 +198,6 @@ function getCodeVariants(code: string): string[] {
     variants.add(`${parts[1]}-${parts[0]}`);
   }
   return Array.from(variants);
-}
-
-function findSignByCode(code: string, signs: TrafficSign[]): TrafficSign | null {
-  if (!code) return null;
-  const variants = getCodeVariants(code);
-  return (
-    signs.find((s) => variants.includes(normalizeSignCode(s.sign_code))) ??
-    null
-  );
 }
 
 function parseQuestionText(text: string, signMap: Map<string, TrafficSign>): QuestionPart[] {
@@ -446,15 +257,13 @@ const SignTokenBadge = ({ code, sign }: { code: string; sign: TrafficSign }) => 
 // ─────────────────────────────────────────────────────────────────
 interface PreviewCardProps {
   formData: FormData;
-  sign: TrafficSign | null;
   allSigns: TrafficSign[];
 }
 
-const PreviewCard = ({ formData, sign, allSigns }: PreviewCardProps) => {
+const PreviewCard = ({ formData, allSigns }: PreviewCardProps) => {
   const hasContent =
     formData.question_text.trim() ||
-    formData.option_a.trim() ||
-    formData.option_a_image_url;
+    formData.option_a.trim();
 
   if (!hasContent) {
     return (
@@ -464,14 +273,13 @@ const PreviewCard = ({ formData, sign, allSigns }: PreviewCardProps) => {
     );
   }
 
-  // بناء خريطة البحث السريع sign_code → sign
   const signMap = new Map(allSigns.map((s) => [normalizeSignCode(s.sign_code), s]));
 
-  const optionMap: Record<OptionLetter, { text: string; image: string }> = {
-    A: { text: formData.option_a, image: formData.option_a_image_url },
-    B: { text: formData.option_b, image: formData.option_b_image_url },
-    C: { text: formData.option_c, image: formData.option_c_image_url },
-    D: { text: formData.option_d, image: formData.option_d_image_url },
+  const optionMap: Record<OptionLetter, string> = {
+    A: formData.option_a,
+    B: formData.option_b,
+    C: formData.option_c,
+    D: formData.option_d,
   };
 
   // تقسيم نص السؤال لاستبدال رموز [] بصور
@@ -485,21 +293,6 @@ const PreviewCard = ({ formData, sign, allSigns }: PreviewCardProps) => {
       </div>
 
       <div className="p-4 space-y-4" dir="rtl">
-        {/* الشاخصة المختارة من الحقل */}
-        {sign && (
-          <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded-lg p-3">
-            <img
-              src={resolveImageUrl(sign.image_url)}
-              alt={sign.title}
-              className="h-14 w-14 object-contain rounded-md border bg-white"
-            />
-            <div>
-              <p className="text-xs text-muted-foreground">الشاخصة المرتبطة</p>
-              <p className="text-sm font-semibold">[{sign.sign_code}] {sign.title}</p>
-            </div>
-          </div>
-        )}
-
         {/* نص السؤال مع استبدال [رمز] بصورة الشاخصة */}
         {formData.question_text && (
           <p className="text-sm font-semibold leading-relaxed text-foreground flex flex-wrap items-center gap-1">
@@ -521,10 +314,9 @@ const PreviewCard = ({ formData, sign, allSigns }: PreviewCardProps) => {
         {/* الخيارات */}
         <div className="grid grid-cols-2 gap-2">
           {OPTION_LETTERS.map((letter) => {
-            const opt = optionMap[letter];
+            const optText = optionMap[letter];
             const isCorrect = formData.correct_answer === letter;
-            const hasOpt = opt.text.trim() || opt.image;
-            if (!hasOpt) return null;
+            if (!optText.trim()) return null;
 
             return (
               <div
@@ -542,25 +334,17 @@ const PreviewCard = ({ formData, sign, allSigns }: PreviewCardProps) => {
                 >
                   {letter}
                 </span>
-                {opt.image ? (
-                  <img
-                    src={resolveImageUrl(opt.image)}
-                    alt={`خيار ${letter}`}
-                    className="h-10 w-auto object-contain rounded"
-                  />
-                ) : (
-                  <span className="truncate flex flex-wrap items-center gap-1">
-                    {parseQuestionText(opt.text, signMap).map((part, idx) => {
-                      if (part.type === 'text') return <span key={idx}>{part.value}</span>;
-                      if (part.sign) return <SignTokenBadge key={idx} code={part.code} sign={part.sign} />;
-                      return (
-                        <span key={idx} className="text-muted-foreground font-mono">
-                          [{part.code}]
-                        </span>
-                      );
-                    })}
-                  </span>
-                )}
+                <span className="truncate flex flex-wrap items-center gap-1">
+                  {parseQuestionText(optText, signMap).map((part, idx) => {
+                    if (part.type === 'text') return <span key={idx}>{part.value}</span>;
+                    if (part.sign) return <SignTokenBadge key={idx} code={part.code} sign={part.sign} />;
+                    return (
+                      <span key={idx} className="text-muted-foreground font-mono">
+                        [{part.code}]
+                      </span>
+                    );
+                  })}
+                </span>
                 {isCorrect && <CheckCircle2 className="shrink-0 w-4 h-4 text-green-500 ml-auto" />}
               </div>
             );
@@ -597,15 +381,64 @@ export const AdminQuestions = () => {
   const emptyForm = (): FormData => ({
     question_text: '',
     option_a: '', option_b: '', option_c: '', option_d: '',
-    option_a_image_url: '', option_b_image_url: '', option_c_image_url: '', option_d_image_url: '',
     correct_answer: 'A',
+    supplemental_wrong_answer: '',
+    supplemental_answer_changed_emergency: false,
     difficulty: 'medium',
     category: '',
-    sign_code: '',
     license_ids: [],
   });
 
   const [formData, setFormData] = useState<FormData>(emptyForm());
+  const [isEmergencyDialogOpen, setIsEmergencyDialogOpen] = useState(false);
+  const [emergencyAnswerDraft, setEmergencyAnswerDraft] = useState('');
+
+  const resolveSupplementalWrongLetter = (current: FormData): OptionLetter => {
+    if (current.supplemental_wrong_answer && current.supplemental_wrong_answer !== current.correct_answer) {
+      return current.supplemental_wrong_answer;
+    }
+    return OPTION_LETTERS.find((letter) => letter !== current.correct_answer) || 'A';
+  };
+
+  const openEmergencyDialog = () => {
+    const wrongLetter = resolveSupplementalWrongLetter(formData);
+    const wrongKey = `option_${wrongLetter.toLowerCase()}` as keyof FormData;
+    setEmergencyAnswerDraft(String(formData[wrongKey] || ''));
+    setIsEmergencyDialogOpen(true);
+  };
+
+  const applyEmergencyAnswer = () => {
+    const nextText = emergencyAnswerDraft.trim();
+    if (!nextText) {
+      toast({
+        title: 'خطأ',
+        description: 'ادخل الجواب الجديد للاستكمالي',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const wrongLetter = resolveSupplementalWrongLetter(formData);
+    const correctKey = `option_${formData.correct_answer.toLowerCase()}` as keyof FormData;
+    const correctText = String(formData[correctKey] || '').trim();
+    if (nextText === correctText) {
+      toast({
+        title: 'خطأ',
+        description: 'الجواب الجديد للاستكمالي يجب أن يختلف عن نص الإجابة الصحيحة',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const wrongKey = `option_${wrongLetter.toLowerCase()}` as keyof FormData;
+    setFormData((prev) => ({
+      ...prev,
+      [wrongKey]: nextText,
+      supplemental_wrong_answer: wrongLetter,
+      supplemental_answer_changed_emergency: true,
+    }));
+    setIsEmergencyDialogOpen(false);
+  };
 
   const PAGE_SIZE = 20;
   const [searchText, setSearchText] = useState('');
@@ -658,15 +491,18 @@ export const AdminQuestions = () => {
     setCurrentPage(1);
   };
 
-  const selectedSign = findSignByCode(formData.sign_code, trafficSigns);
-
   const fetchQuestions = async () => {
     try {
       const { data, error } = await apiRequest<Question[]>('/questions');
       if (error) throw new Error(error.message);
-      setQuestions(data || []);
-    } catch {
-      toast({ title: 'خطأ', description: 'فشل في تحميل الأسئلة', variant: 'destructive' });
+      setQuestions(Array.isArray(data) ? data : []);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({
+        title: 'خطأ',
+        description: msg.trim() ? msg : 'فشل في تحميل الأسئلة',
+        variant: 'destructive',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -697,11 +533,8 @@ export const AdminQuestions = () => {
     } catch { /* غير حرج */ }
   };
 
-  const setOption = (letter: OptionLetter, field: 'text' | 'image', value: string) => {
-    const key =
-      field === 'text'
-        ? (`option_${letter.toLowerCase()}` as keyof FormData)
-        : (`option_${letter.toLowerCase()}_image_url` as keyof FormData);
+  const setOptionText = (letter: OptionLetter, value: string) => {
+    const key = `option_${letter.toLowerCase()}` as keyof FormData;
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -710,26 +543,47 @@ export const AdminQuestions = () => {
 
     for (const letter of OPTION_LETTERS) {
       const text = formData[`option_${letter.toLowerCase()}` as keyof FormData] as string;
-      const img = formData[`option_${letter.toLowerCase()}_image_url` as keyof FormData] as string;
-      if (!text.trim() && !img.trim()) {
+      if (!text.trim()) {
         toast({
           title: 'خطأ',
-          description: `الخيار ${letter} مطلوب (أدخل نصًا أو أرفق صورة)`,
+          description: `الخيار ${letter} مطلوب`,
           variant: 'destructive',
         });
         return;
       }
     }
 
+    if (!formData.supplemental_wrong_answer) {
+      toast({
+        title: 'خطأ',
+        description: 'حدد الخيار الخاطئ للامتحان الاستكمالي',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (formData.supplemental_wrong_answer === formData.correct_answer) {
+      toast({
+        title: 'خطأ',
+        description: 'الخيار الخاطئ الاستكمالي يجب أن يختلف عن الإجابة الصحيحة',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       const payload = {
-        ...formData,
-        sign_code: formData.sign_code || null,
+        question_text: formData.question_text,
+        option_a: formData.option_a,
+        option_b: formData.option_b,
+        option_c: formData.option_c,
+        option_d: formData.option_d,
+        correct_answer: formData.correct_answer,
+        supplemental_wrong_answer: formData.supplemental_wrong_answer,
+        supplemental_answer_changed_emergency: formData.supplemental_answer_changed_emergency,
+        difficulty: formData.difficulty,
         category: formData.category || null,
-        option_a_image_url: formData.option_a_image_url || null,
-        option_b_image_url: formData.option_b_image_url || null,
-        option_c_image_url: formData.option_c_image_url || null,
-        option_d_image_url: formData.option_d_image_url || null,
+        license_ids: formData.license_ids,
       };
 
       if (editingQuestion) {
@@ -791,14 +645,11 @@ export const AdminQuestions = () => {
       option_b: question.option_b,
       option_c: question.option_c,
       option_d: question.option_d || '',
-      option_a_image_url: question.option_a_image_url || '',
-      option_b_image_url: question.option_b_image_url || '',
-      option_c_image_url: question.option_c_image_url || '',
-      option_d_image_url: question.option_d_image_url || '',
       correct_answer: question.correct_answer,
+      supplemental_wrong_answer: question.supplemental_wrong_answer || '',
+      supplemental_answer_changed_emergency: question.supplemental_answer_changed_emergency ?? false,
       difficulty: question.difficulty,
       category: question.category || '',
-      sign_code: question.sign_code || '',
       license_ids: (question.licenses || []).map((l) => l.id),
     });
     setIsDialogOpen(true);
@@ -909,12 +760,8 @@ export const AdminQuestions = () => {
                         key={letter}
                         letter={letter}
                         text={formData[`option_${letter.toLowerCase()}` as keyof FormData] as string}
-                        imageUrl={
-                          formData[`option_${letter.toLowerCase()}_image_url` as keyof FormData] as string
-                        }
                         isCorrect={formData.correct_answer === letter}
-                        onTextChange={(val) => setOption(letter, 'text', val)}
-                        onImageChange={(url) => setOption(letter, 'image', url)}
+                        onTextChange={(val) => setOptionText(letter, val)}
                         onSelectCorrect={() =>
                           setFormData((prev) => ({ ...prev, correct_answer: letter }))
                         }
@@ -923,14 +770,115 @@ export const AdminQuestions = () => {
                   </div>
                 </div>
 
+                <div>
+                  <Label>الخيار الخاطئ للامتحان الاستكمالي</Label>
+                  <Select
+                    value={formData.supplemental_wrong_answer || '__none__'}
+                    onValueChange={(v) =>
+                      setFormData({
+                        ...formData,
+                        supplemental_wrong_answer: v === '__none__' ? '' : (v as OptionLetter),
+                      })
+                    }
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="اختر خيارًا خاطئًا ثابتًا للاستكمالي..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— اختر —</SelectItem>
+                      {OPTION_LETTERS.map((letter) => (
+                        <SelectItem key={letter} value={letter} disabled={letter === formData.correct_answer}>
+                          {`الخيار ${letter}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formData.supplemental_wrong_answer === formData.correct_answer && (
+                    <p className="mt-1 text-xs text-destructive">
+                      لا يمكن أن يكون خيار الاستكمالي الخاطئ هو نفس الإجابة الصحيحة.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-start gap-3 rounded-lg border-2 border-amber-300 bg-amber-50 p-3">
+                  <Checkbox
+                    id="supplemental_emergency"
+                    checked={formData.supplemental_answer_changed_emergency || isEmergencyDialogOpen}
+                    onCheckedChange={(checked) => {
+                      if (checked === true) {
+                        openEmergencyDialog();
+                        return;
+                      }
+                      setFormData((prev) => ({
+                        ...prev,
+                        supplemental_answer_changed_emergency: false,
+                      }));
+                    }}
+                    className="mt-0.5"
+                  />
+                  <div className="flex flex-col gap-0.5">
+                    <label
+                      htmlFor="supplemental_emergency"
+                      className="text-sm font-semibold text-amber-800 cursor-pointer"
+                    >
+                      تم تغيير جواب الاستكمالي — طوارئ
+                    </label>
+                    <p className="text-xs text-amber-700">
+                      فعّل هذا الخيار إذا تغيّر الجواب في السؤال الاستكمالي. يؤثر على الامتحان الاستكمالي فقط دون تغيير الامتحان العادي.
+                    </p>
+                  </div>
+                </div>
+                <Dialog
+                  open={isEmergencyDialogOpen}
+                  onOpenChange={(open) => {
+                    setIsEmergencyDialogOpen(open);
+                  }}
+                >
+                  <DialogContent className="max-w-md" dir="rtl">
+                    <DialogHeader>
+                      <DialogTitle>ادخل الجواب الجديد</DialogTitle>
+                      <DialogDescription>
+                        اختر الجواب الجديد الذي سيظهر كخيار خاطئ في الامتحان الاستكمالي.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-3">
+                      <Label>الجواب الجديد للاستكمالي</Label>
+                      <Input
+                        value={emergencyAnswerDraft}
+                        onChange={(e) => setEmergencyAnswerDraft(e.target.value)}
+                        placeholder="ادخل نص الجواب الجديد..."
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        سيتم حفظ هذا النص كخيار خاطئ للاستكمالي في السؤال الحالي.
+                      </p>
+                    </div>
+
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setIsEmergencyDialogOpen(false);
+                          setFormData((prev) => ({
+                            ...prev,
+                            supplemental_answer_changed_emergency: false,
+                          }));
+                        }}
+                      >
+                        إلغاء
+                      </Button>
+                      <Button type="button" onClick={applyEmergencyAnswer}>
+                        حفظ الجواب الجديد
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
                 {/* ── معاينة مباشرة ── */}
                 <div>
                   <Label className="block mb-2 text-primary font-semibold">معاينة السؤال</Label>
-                  <PreviewCard
-                    formData={formData}
-                    sign={selectedSign}
-                    allSigns={trafficSigns}
-                  />
+                  <PreviewCard formData={formData} allSigns={trafficSigns} />
                 </div>
 
                 <Separator />
@@ -1136,6 +1084,8 @@ export const AdminQuestions = () => {
                         <TableHead className="text-right">التصنيف</TableHead>
                         <TableHead className="text-right">الصعوبة</TableHead>
                         <TableHead className="text-right">الإجابة</TableHead>
+                        <TableHead className="text-right">خاطئ استكمالي</TableHead>
+                        <TableHead className="text-right">طوارئ</TableHead>
                         <TableHead className="text-right">الرخص</TableHead>
                         <TableHead className="text-right">الحالة</TableHead>
                         <TableHead className="text-right">الإجراءات</TableHead>
@@ -1169,6 +1119,16 @@ export const AdminQuestions = () => {
                                 : 'صعب'}
                           </TableCell>
                           <TableCell className="font-bold">{question.correct_answer}</TableCell>
+                          <TableCell className="font-bold">
+                            {question.supplemental_wrong_answer || '—'}
+                          </TableCell>
+                          <TableCell>
+                            {question.supplemental_answer_changed_emergency ? (
+                              <Badge variant="destructive" className="text-xs">طوارئ</Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
                               {(question.licenses || []).length > 0 ? (

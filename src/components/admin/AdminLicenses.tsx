@@ -170,7 +170,10 @@ export const AdminLicenses = () => {
           },
         ]);
         if (error) throw error;
-        toast({ title: 'تمت الإضافة', description: 'تم إدراج الرخصة بنجاح' });
+        toast({
+          title: 'تمت الإضافة',
+          description: 'تم إدراج الرخصة بنجاح. أُنشئ قسم أسعار وباقة سعر افتراضية تلقائياً في «الأسعار».',
+        });
       }
 
       setIsDialogOpen(false);

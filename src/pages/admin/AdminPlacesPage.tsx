@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAdminRole } from '@/hooks/useAdminRole';
-import { AdminStudyMaterials } from '@/components/admin/AdminStudyMaterials';
+import { AdminPlaces } from '@/components/admin/AdminPlaces';
 import AdminNavigation from '@/components/admin/AdminNavigation';
 
-const AdminMaterialsPage = () => {
+const AdminPlacesPage = () => {
   const { isAdmin, isLoading } = useAdminRole();
   const navigate = useNavigate();
 
@@ -31,10 +31,10 @@ const AdminMaterialsPage = () => {
     <>
       <AdminNavigation />
       <div className="container mx-auto py-8 px-4" dir="rtl">
-        <AdminStudyMaterials />
+        <AdminPlaces />
       </div>
     </>
   );
 };
 
-export default AdminMaterialsPage;
+export default AdminPlacesPage;

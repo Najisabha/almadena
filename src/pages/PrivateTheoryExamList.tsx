@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -21,8 +21,27 @@ interface RawQuestion {
 
 const PrivateTheoryExamList = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [examCount, setExamCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [resolvedLicenseName, setResolvedLicenseName] = useState('');
+
+  const selectedLicenseCode = (searchParams.get('license') || LICENSE_CODE).toUpperCase();
+  const selectedLicenseName = searchParams.get('name') || '';
+  const examMode = searchParams.get('examMode') === 'supplemental' ? 'supplemental' : 'regular';
+
+  const pageTitle = useMemo(() => {
+    const baseName = selectedLicenseName || resolvedLicenseName || selectedLicenseCode;
+    if (examMode === 'supplemental') {
+      return `امتحانات استكمالي ${baseName}`;
+    }
+    return `أسئلة تؤوريا ${baseName}`;
+  }, [examMode, resolvedLicenseName, selectedLicenseCode, selectedLicenseName]);
+
+  const tileLabel = useMemo(() => {
+    const baseName = selectedLicenseName || resolvedLicenseName || selectedLicenseCode;
+    return examMode === 'supplemental' ? `استكمالي ${baseName}` : `تؤوريا ${baseName}`;
+  }, [examMode, resolvedLicenseName, selectedLicenseCode, selectedLicenseName]);
 
   useEffect(() => {
     const fetchCount = async () => {
@@ -33,9 +52,17 @@ const PrivateTheoryExamList = () => {
         const all: RawQuestion[] = payload?.data || [];
         const filtered = all.filter((q) =>
           (q.licenses || []).some(
-            (l) => l.code.toUpperCase() === LICENSE_CODE
+            (l) => l.code.toUpperCase() === selectedLicenseCode
           )
         );
+        if (!selectedLicenseName) {
+          const fromQuestions = filtered
+            .flatMap((q) => q.licenses || [])
+            .find((l) => l.code.toUpperCase() === selectedLicenseCode)?.name_ar;
+          setResolvedLicenseName(fromQuestions || '');
+        } else {
+          setResolvedLicenseName(selectedLicenseName);
+        }
         setExamCount(Math.ceil(filtered.length / PER_EXAM));
       } catch {
         setExamCount(0);
@@ -44,7 +71,7 @@ const PrivateTheoryExamList = () => {
       }
     };
     fetchCount();
-  }, []);
+  }, [selectedLicenseCode, selectedLicenseName]);
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
@@ -52,7 +79,7 @@ const PrivateTheoryExamList = () => {
       <section className="bg-gradient-primary text-white py-12">
         <div className="container mx-auto px-4 text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-3">
-            أسئلة<br />تؤوريا خصوصي
+            {pageTitle}
           </h1>
         </div>
       </section>
@@ -68,7 +95,7 @@ const PrivateTheoryExamList = () => {
 
           {!isLoading && examCount === 0 && (
             <div className="text-center py-16 text-muted-foreground">
-              لا توجد أسئلة مرتبطة برخصة خصوصي حالياً.
+              لا توجد أسئلة مرتبطة بهذه الرخصة حالياً.
             </div>
           )}
 
@@ -81,7 +108,7 @@ const PrivateTheoryExamList = () => {
                     key={examNumber}
                     onClick={() =>
                       navigate(
-                        `/mock-exam?license=${LICENSE_CODE}&exam=${examNumber}&perPage=${PER_EXAM}`
+                        `/mock-exam?license=${selectedLicenseCode}&exam=${examNumber}&perPage=${PER_EXAM}${examMode === 'supplemental' ? '&examMode=supplemental' : ''}`
                       )
                     }
                     className={cn(
@@ -89,7 +116,7 @@ const PrivateTheoryExamList = () => {
                       'bg-primary text-primary-foreground border-primary hover:brightness-110 hover:scale-[1.02] shadow-sm'
                     )}
                   >
-                    <span>تؤوريا خصوصي</span>
+                    <span>{tileLabel}</span>
                     <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white/20 text-white text-xs font-bold flex-shrink-0">
                       {examNumber}
                     </span>

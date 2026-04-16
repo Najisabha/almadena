@@ -64,7 +64,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<ApiResp
     const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
     const payload = await response.json();
     if (!response.ok) {
-      return { data: null as T, error: { message: payload.message || "Request failed" } };
+      const detail =
+        typeof payload.detail === "string" && payload.detail.trim() !== ""
+          ? payload.detail.trim()
+          : "";
+      const base = payload.message || "Request failed";
+      return {
+        data: null as T,
+        error: { message: detail ? `${base} — ${detail}` : base },
+      };
     }
     return { data: payload.data ?? payload, error: null };
   } catch (error) {
@@ -244,17 +252,50 @@ export const api = {
       idNumber,
       password,
       options,
+      idImageFile,
     }: {
       idNumber: string;
       password: string;
       options?: { data?: Record<string, unknown> };
+      idImageFile?: File | null;
     }) {
+      const profile = options?.data || {};
+
+      if (idImageFile) {
+        try {
+          const form = new FormData();
+          form.append("idNumber", idNumber);
+          form.append("password", password);
+          form.append("profile", JSON.stringify(profile));
+          form.append("idImage", idImageFile);
+          const response = await fetch(`${API_BASE}/auth/register`, {
+            method: "POST",
+            body: form,
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            return {
+              data: null,
+              error: { message: (payload as { message?: string }).message || "Request failed" },
+            };
+          }
+          const data = payload as { token?: string; user?: AuthUser };
+          if (!data.token || !data.user) {
+            return { data: null, error: { message: "Invalid response" } };
+          }
+          setSession(data.token, data.user);
+          return { data: { user: data.user }, error: null };
+        } catch (error) {
+          return { data: null, error: { message: (error as Error).message } };
+        }
+      }
+
       const response = await request<{ token: string; user: AuthUser }>("/auth/register", {
         method: "POST",
         body: JSON.stringify({
           idNumber,
           password,
-          profile: options?.data || {},
+          profile,
         }),
       });
       if (response.error) {
@@ -331,6 +372,128 @@ export const api = {
   async getAdminStudentsManagement() {
     return request<AdminStudentManagementRow[]>("/admin/students");
   },
+
+  /** Admin: تحديث بيانات مستخدم كاملة (users + profiles + students + is_admin) في معاملة واحدة */
+  async patchAdminUser(userId: string, body: AdminUserPatchPayload) {
+    return request<AdminStudentManagementRow>(`/admin/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  },
+
+  /** Admin: جلب بيانات مستخدم واحد كاملة */
+  async getAdminUser(userId: string) {
+    return request<AdminUserFullRow>(`/admin/users/${userId}`);
+  },
+
+  /** Admin: حذف حساب مستخدم بالكامل */
+  async deleteAdminUser(userId: string) {
+    return request<{ message: string }>(`/admin/users/${userId}`, { method: "DELETE" });
+  },
+
+  /** هل المستخدم الحالي (JWT) لديه دور مشرف */
+  async checkIsAdmin(): Promise<boolean> {
+    const { data, error } = await request<{ isAdmin: boolean }>("/admin/me/is-admin");
+    if (error || data == null) return false;
+    return Boolean(data.isAdmin);
+  },
+
+  /** رفع صورة مدرب → يُعاد مسارًا نسبيًا مثل /uploads/instructors/... */
+  async uploadInstructorImage(file: File): Promise<ApiResponse<{ url: string }>> {
+    try {
+      const token = getToken();
+      const form = new FormData();
+      form.append("image", file);
+      const response = await fetch(`${API_BASE}/upload/instructors`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        const detail =
+          typeof payload.detail === "string" && payload.detail.trim() !== ""
+            ? payload.detail.trim()
+            : "";
+        const base = payload.message || "فشل رفع الصورة";
+        return { data: null as { url: string }, error: { message: detail ? `${base} — ${detail}` : base } };
+      }
+      const inner = payload.data ?? payload;
+      const url = typeof inner?.url === "string" ? inner.url : "";
+      if (!url) {
+        return { data: null as { url: string }, error: { message: "لم يُرجع الرابط من الخادم" } };
+      }
+      return { data: { url }, error: null };
+    } catch (error) {
+      return { data: null as { url: string }, error: { message: (error as Error).message } };
+    }
+  },
+
+  /** رفع صورة لقصة نجاح → يُعاد مسارًا نسبيًا مثل /uploads/success-stories/... */
+  async uploadSuccessStoryImage(file: File): Promise<ApiResponse<{ url: string }>> {
+    try {
+      const token = getToken();
+      const form = new FormData();
+      form.append("image", file);
+      const response = await fetch(`${API_BASE}/upload/success-stories`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        const detail =
+          typeof payload.detail === "string" && payload.detail.trim() !== ""
+            ? payload.detail.trim()
+            : "";
+        const base = payload.message || "فشل رفع الصورة";
+        return { data: null as { url: string }, error: { message: detail ? `${base} — ${detail}` : base } };
+      }
+      const inner = payload.data ?? payload;
+      const url = typeof inner?.url === "string" ? inner.url : "";
+      if (!url) {
+        return { data: null as { url: string }, error: { message: "لم يُرجع الرابط من الخادم" } };
+      }
+      return { data: { url }, error: null };
+    } catch (error) {
+      return { data: null as { url: string }, error: { message: (error as Error).message } };
+    }
+  },
+
+  /** مشرف: رفع ملف صورة هوية → يُعاد مسارًا نسبيًا مثل /uploads/id-documents/... */
+  async uploadAdminIdDocumentImage(
+    file: File,
+    idNumber: string
+  ): Promise<ApiResponse<{ url: string }>> {
+    try {
+      const token = getToken();
+      const form = new FormData();
+      form.append("image", file);
+      form.append("id_number", idNumber.trim());
+      const response = await fetch(`${API_BASE}/upload/id-document`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        const detail =
+          typeof payload.detail === "string" && payload.detail.trim() !== ""
+            ? payload.detail.trim()
+            : "";
+        const base = payload.message || "فشل رفع الصورة";
+        return { data: null as { url: string }, error: { message: detail ? `${base} — ${detail}` : base } };
+      }
+      const inner = payload.data ?? payload;
+      const url = typeof inner?.url === "string" ? inner.url : "";
+      if (!url) {
+        return { data: null as { url: string }, error: { message: "لم يُرجع الرابط من الخادم" } };
+      }
+      return { data: { url }, error: null };
+    } catch (error) {
+      return { data: null as { url: string }, error: { message: (error as Error).message } };
+    }
+  },
 };
 
 export type ExamAttempt = {
@@ -360,6 +523,10 @@ export type AdminStudent = {
   first_name: string;
   last_name: string;
   license_type: string | null;
+  /** تاريخ الميلاد من الملف الشخصي (لحساب العمر في الواجهة) */
+  date_of_birth: string | null;
+  /** تاريخ إنشاء حساب المستخدم (تاريخ التسجيل بالموقع) */
+  registered_at: string;
   id_number?: string | null;
   is_admin?: boolean;
 };
@@ -380,5 +547,69 @@ export type AdminStudentManagementRow = {
     last_name: string;
     phone: string | null;
     license_type: string | null;
+    city?: string | null;
+    town?: string | null;
+    full_address?: string | null;
+    date_of_birth?: string | null;
+    id_image_url?: string | null;
+    id_image_status?: string | null;
+    id_image_pinned?: boolean;
+    avatar_url?: string | null;
+  };
+};
+
+/** عقد جسم الطلب لـ PATCH /api/admin/users/:userId */
+export type AdminUserPatchPayload = {
+  user?: { id_number?: string };
+  profile?: {
+    first_name?: string;
+    last_name?: string;
+    phone?: string | null;
+    license_type?: string | null;
+    city?: string | null;
+    town?: string | null;
+    full_address?: string | null;
+    date_of_birth?: string | null;
+    id_image_url?: string | null;
+    id_image_status?: string | null;
+    id_image_pinned?: boolean;
+    avatar_url?: string | null;
+  };
+  student?: {
+    theory_score?: number | null;
+    practical_score?: number | null;
+    notes?: string | null;
+    total_exams_taken?: number;
+    last_exam_date?: string | null;
+  };
+  is_admin?: boolean;
+};
+
+/** صف مستخدم كامل يُعاد من GET /api/admin/users/:userId */
+export type AdminUserFullRow = {
+  user_id: string;
+  id_number: string | null;
+  is_admin: boolean;
+  student: {
+    id: string | null;
+    theory_score: number | null;
+    practical_score: number | null;
+    total_exams_taken: number;
+    last_exam_date: string | null;
+    notes: string | null;
+  };
+  profile: {
+    first_name: string;
+    last_name: string;
+    phone: string | null;
+    license_type: string | null;
+    city: string | null;
+    town: string | null;
+    full_address: string | null;
+    date_of_birth: string | null;
+    id_image_url: string | null;
+    id_image_status: string | null;
+    id_image_pinned: boolean;
+    avatar_url: string | null;
   };
 };
