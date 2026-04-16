@@ -133,6 +133,12 @@ END $$;`,
     option_c TEXT NOT NULL,
     option_d TEXT NOT NULL DEFAULT '',
     correct_answer CHAR(1) NOT NULL CHECK (correct_answer IN ('A', 'B', 'C', 'D')),
+    supplemental_wrong_answer CHAR(1) CHECK (
+      supplemental_wrong_answer IS NULL OR supplemental_wrong_answer IN ('A', 'B', 'C', 'D')
+    ),
+    CONSTRAINT questions_supplemental_wrong_not_equal_correct CHECK (
+      supplemental_wrong_answer IS NULL OR supplemental_wrong_answer <> correct_answer
+    ),
     difficulty TEXT DEFAULT 'medium' CHECK (difficulty IN ('easy', 'medium', 'hard')),
     category TEXT CHECK (category IN ('اشارات مرور', 'قوانين', 'ميكانيك')),
     is_active BOOLEAN DEFAULT TRUE,
@@ -141,6 +147,18 @@ END $$;`,
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );`,
   `ALTER TABLE questions ADD COLUMN IF NOT EXISTS option_d TEXT NOT NULL DEFAULT '';`,
+  `ALTER TABLE questions ADD COLUMN IF NOT EXISTS supplemental_wrong_answer CHAR(1);`,
+  `ALTER TABLE questions ADD COLUMN IF NOT EXISTS supplemental_answer_changed_emergency BOOLEAN NOT NULL DEFAULT FALSE;`,
+  `ALTER TABLE questions DROP CONSTRAINT IF EXISTS questions_supplemental_wrong_answer_check;`,
+  `ALTER TABLE questions DROP CONSTRAINT IF EXISTS questions_supplemental_wrong_not_equal_correct;`,
+  `ALTER TABLE questions
+     ADD CONSTRAINT questions_supplemental_wrong_answer_check CHECK (
+       supplemental_wrong_answer IS NULL OR supplemental_wrong_answer IN ('A', 'B', 'C', 'D')
+     );`,
+  `ALTER TABLE questions
+     ADD CONSTRAINT questions_supplemental_wrong_not_equal_correct CHECK (
+       supplemental_wrong_answer IS NULL OR supplemental_wrong_answer <> correct_answer
+     );`,
   `ALTER TABLE questions DROP COLUMN IF EXISTS question_type;`,
   `ALTER TABLE questions DROP COLUMN IF EXISTS image_url;`,
   `ALTER TABLE questions DROP COLUMN IF EXISTS option_a_image_url;`,

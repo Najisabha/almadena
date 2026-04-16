@@ -8,9 +8,56 @@ const VALID_DIFFICULTIES = ["easy", "medium", "hard"];
 const VALID_ANSWERS = ["A", "B", "C", "D"];
 
 const OPTION_KEYS = ["a", "b", "c", "d"];
+let ensureSupplementalColumnPromise = null;
+
+async function ensureSupplementalColumn() {
+  if (!ensureSupplementalColumnPromise) {
+    ensureSupplementalColumnPromise = query(
+      `ALTER TABLE questions
+       ADD COLUMN IF NOT EXISTS supplemental_wrong_answer CHAR(1);`
+    )
+      .then(() =>
+        query(
+          `ALTER TABLE questions DROP CONSTRAINT IF EXISTS questions_supplemental_wrong_answer_check;`
+        )
+      )
+      .then(() =>
+        query(
+          `ALTER TABLE questions
+           ADD CONSTRAINT questions_supplemental_wrong_answer_check CHECK (
+             supplemental_wrong_answer IS NULL OR supplemental_wrong_answer IN ('A', 'B', 'C', 'D')
+           );`
+        )
+      )
+      .then(() =>
+        query(
+          `ALTER TABLE questions DROP CONSTRAINT IF EXISTS questions_supplemental_wrong_not_equal_correct;`
+        )
+      )
+      .then(() =>
+        query(
+          `ALTER TABLE questions
+           ADD CONSTRAINT questions_supplemental_wrong_not_equal_correct CHECK (
+             supplemental_wrong_answer IS NULL OR supplemental_wrong_answer <> correct_answer
+           );`
+        )
+      )
+      .then(() =>
+        query(
+          `ALTER TABLE questions
+           ADD COLUMN IF NOT EXISTS supplemental_answer_changed_emergency BOOLEAN NOT NULL DEFAULT FALSE;`
+        )
+      )
+      .catch((error) => {
+        ensureSupplementalColumnPromise = null;
+        throw error;
+      });
+  }
+  return ensureSupplementalColumnPromise;
+}
 
 function validateQuestionPayload(payload, partial = false) {
-  const { correct_answer, difficulty, category } = payload;
+  const { correct_answer, difficulty, category, supplemental_wrong_answer } = payload;
 
   if (!partial) {
     if (!payload.question_text || !String(payload.question_text).trim()) {
@@ -36,12 +83,21 @@ function validateQuestionPayload(payload, partial = false) {
   if (category && !VALID_CATEGORIES.includes(category)) {
     throw new Error("التصنيف غير صالح");
   }
+  if (supplemental_wrong_answer != null && supplemental_wrong_answer !== "") {
+    if (!VALID_ANSWERS.includes(supplemental_wrong_answer)) {
+      throw new Error("خيار الامتحان الاستكمالي يجب أن يكون A أو B أو C أو D");
+    }
+    if (correct_answer && supplemental_wrong_answer === correct_answer) {
+      throw new Error("خيار الامتحان الاستكمالي يجب أن يختلف عن الإجابة الصحيحة");
+    }
+  }
 }
 
 const ALLOWED_UPDATE_FIELDS = [
   "question_text",
   "option_a", "option_b", "option_c", "option_d",
-  "correct_answer", "difficulty", "category",
+  "correct_answer", "supplemental_wrong_answer", "supplemental_answer_changed_emergency",
+  "difficulty", "category",
   "is_active", "display_order",
 ];
 
@@ -54,6 +110,8 @@ const LIST_SQL = `
     q.option_c,
     q.option_d,
     q.correct_answer,
+    q.supplemental_wrong_answer,
+    q.supplemental_answer_changed_emergency,
     q.difficulty,
     q.category,
     q.is_active,
@@ -80,6 +138,8 @@ const SINGLE_SQL = `
     q.option_c,
     q.option_d,
     q.correct_answer,
+    q.supplemental_wrong_answer,
+    q.supplemental_answer_changed_emergency,
     q.difficulty,
     q.category,
     q.is_active,
@@ -105,6 +165,8 @@ const QUESTION_RETURNING_SQL = `
   option_c,
   option_d,
   correct_answer,
+  supplemental_wrong_answer,
+  supplemental_answer_changed_emergency,
   difficulty,
   category,
   is_active,
@@ -115,6 +177,15 @@ const QUESTION_RETURNING_SQL = `
 
 export function buildQuestionsRouter() {
   const router = express.Router();
+
+  router.use(async (_req, _res, next) => {
+    try {
+      await ensureSupplementalColumn();
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  });
 
   router.get("/", async (req, res) => {
     try {
@@ -138,7 +209,9 @@ export function buildQuestionsRouter() {
       const {
         question_text,
         option_a, option_b, option_c, option_d,
-        correct_answer, difficulty, category,
+        correct_answer, supplemental_wrong_answer,
+        supplemental_answer_changed_emergency,
+        difficulty, category,
         is_active, display_order,
       } = body;
 
@@ -146,14 +219,19 @@ export function buildQuestionsRouter() {
         `INSERT INTO questions
           (question_text,
            option_a, option_b, option_c, option_d,
-           correct_answer, difficulty, category,
+           correct_answer, supplemental_wrong_answer,
+           supplemental_answer_changed_emergency,
+           difficulty, category,
            is_active, display_order)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
          RETURNING ${QUESTION_RETURNING_SQL}`,
         [
           question_text,
           option_a ?? "", option_b ?? "", option_c ?? "", option_d ?? "",
-          correct_answer, difficulty ?? "medium", category ?? null,
+          correct_answer,
+          supplemental_wrong_answer || null,
+          supplemental_answer_changed_emergency === true,
+          difficulty ?? "medium", category ?? null,
           is_active !== undefined ? is_active : true,
           display_order ?? 0,
         ]

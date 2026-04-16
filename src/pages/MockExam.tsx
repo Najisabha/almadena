@@ -23,6 +23,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -33,7 +34,7 @@ interface QuestionLicense {
 }
 
 interface TrafficSign {
-  sign_code: string;
+  code: string;
   title: string;
   image_url: string;
   is_active?: boolean;
@@ -46,12 +47,9 @@ interface Question {
   option_b: string;
   option_c: string;
   option_d: string | null;
-  option_a_image_url?: string | null;
-  option_b_image_url?: string | null;
-  option_c_image_url?: string | null;
-  option_d_image_url?: string | null;
   correct_answer: string;
-  image_url: string | null;
+  supplemental_wrong_answer?: string | null;
+  supplemental_answer_changed_emergency?: boolean;
   difficulty?: string | null;
   is_active?: boolean;
   display_order?: number | null;
@@ -89,12 +87,29 @@ function resolveUrl(url?: string | null): string {
   return `${API_BASE}${clean.startsWith('/') ? '' : '/'}${clean}`;
 }
 
-function normalizeSignCode(code: string): string {
-  return code.replace(/\s+/g, '').replace(/[–—]/g, '-').trim();
+function normalizeBracketToken(code: string | null | undefined): string {
+  const s = code == null ? '' : String(code);
+  return s.replace(/\s+/g, '').replace(/[–—]/g, '-').trim();
+}
+
+function mapTrafficSignRow(raw: Record<string, unknown>): TrafficSign {
+  const legacyKey = ['sign', '_', 'code'].join('');
+  const label =
+    typeof raw.code === 'string'
+      ? raw.code
+      : typeof raw[legacyKey] === 'string'
+        ? (raw[legacyKey] as string)
+        : '';
+  return {
+    code: label,
+    title: typeof raw.title === 'string' ? raw.title : '',
+    image_url: typeof raw.image_url === 'string' ? raw.image_url : '',
+    is_active: raw.is_active !== false,
+  };
 }
 
 function getCodeVariants(code: string): string[] {
-  const normalized = normalizeSignCode(code);
+  const normalized = normalizeBracketToken(code);
   const variants = new Set<string>([normalized]);
   const parts = normalized.split('-').filter(Boolean);
   if (parts.length === 2) {
@@ -128,6 +143,20 @@ function parseQuestionText(text: string, signMap: Map<string, TrafficSign>): Que
 }
 
 const EXAM_DURATION = 60 * 60; // 1 hour in seconds
+const OPTION_KEY_TO_LABEL: Record<string, string> = {
+  a: 'أ',
+  b: 'ب',
+  c: 'ج',
+  d: 'د',
+};
+
+function getOptionTextByKey(question: Question, key: string): string {
+  if (key === 'a') return question.option_a || '';
+  if (key === 'b') return question.option_b || '';
+  if (key === 'c') return question.option_c || '';
+  if (key === 'd') return question.option_d || '';
+  return '';
+}
 
 const MockExam = () => {
   const [searchParams] = useSearchParams();
@@ -139,6 +168,8 @@ const MockExam = () => {
   const perPage = Math.max(1, Number(searchParams.get('perPage') || '30'));
   const practiceMode = searchParams.get('practice') === '1';
   const difficultyParam = searchParams.get('difficulty') || '';
+  const examMode = searchParams.get('examMode') || '';
+  const isSupplementalMode = examMode === 'supplemental';
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [trafficSigns, setTrafficSigns] = useState<TrafficSign[]>([]);
@@ -204,6 +235,17 @@ const MockExam = () => {
           all = all.filter((q: any) => q.is_active);
         }
 
+        if (isSupplementalMode) {
+          all = all.filter((q) => {
+            const correctKey = (q.correct_answer || '').toLowerCase();
+            const wrongKey = (q.supplemental_wrong_answer || '').toLowerCase();
+            if (!correctKey || !wrongKey || correctKey === wrongKey) return false;
+            const correctText = getOptionTextByKey(q, correctKey).trim();
+            const wrongText = getOptionTextByKey(q, wrongKey).trim();
+            return correctText !== '' && wrongText !== '';
+          });
+        }
+
         if (all.length === 0) {
           setLoadState('empty');
           return;
@@ -230,13 +272,14 @@ const MockExam = () => {
     };
 
     fetchQuestions();
-  }, [licenseParam, categoryParam, examNumber, perPage, practiceMode, difficultyParam]);
+  }, [licenseParam, categoryParam, examNumber, perPage, practiceMode, difficultyParam, isSupplementalMode]);
 
   useEffect(() => {
     const fetchSigns = async () => {
       try {
         const { data } = await apiClient.from('traffic_signs').select().order('sign_number', { ascending: true });
-        const signs = ((data as TrafficSign[] | null) || []).filter((s) => s.is_active !== false);
+        const rows = (data as Record<string, unknown>[] | null) || [];
+        const signs = rows.filter((r) => r.is_active !== false).map((r) => mapTrafficSignRow(r));
         setTrafficSigns(signs);
       } catch {
         setTrafficSigns([]);
@@ -354,7 +397,7 @@ const MockExam = () => {
       passed: result.passed,
     });
 
-    // Persist to server (async — fire and forget, errors are non-fatal)
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('almadena_token') : null;
     apiClient
       .postExamAttempt({
         license_code: licenseCode,
@@ -365,7 +408,18 @@ const MockExam = () => {
         percentage: Math.round(result.percentage * 100) / 100,
         passed: result.passed,
       })
-      .catch(() => {/* silent — offline or unauthenticated users still have localStorage */});
+      .then((res) => {
+        if (res.error) {
+          if (!token) {
+            toast.info('تم حفظ النتيجة على هذا الجهاز فقط. سجّل الدخول لحفظها في حسابك ولوحة التحكم.');
+          } else {
+            toast.warning('تعذّر مزامنة النتيجة مع الخادم؛ بقيت محفوظة محلياً على هذا الجهاز.');
+          }
+        }
+      })
+      .catch(() => {
+        toast.warning('تعذّر مزامنة النتيجة مع الخادم؛ بقيت محفوظة محلياً على هذا الجهاز.');
+      });
 
     // Mark all questions as feedback-visible
     setCheckedQuestions((prev) => {
@@ -402,9 +456,6 @@ const MockExam = () => {
     if (answers[i]) return 'bg-muted-foreground/70 text-white';
     return 'bg-muted-foreground/30 text-foreground';
   };
-
-  const optionLabels = ['أ', 'ب', 'ج', 'د'];
-  const optionKeys = ['a', 'b', 'c', 'd'];
 
   const backUrl =
     licenseParam.toUpperCase() === 'B' || categoryParam === 'private'
@@ -456,14 +507,29 @@ const MockExam = () => {
   // ─── ready ───
   if (!currentQuestion) return null;
 
-  const optionValues = [
-    { text: currentQuestion.option_a, img: currentQuestion.option_a_image_url },
-    { text: currentQuestion.option_b, img: currentQuestion.option_b_image_url },
-    { text: currentQuestion.option_c, img: currentQuestion.option_c_image_url },
-    { text: currentQuestion.option_d, img: currentQuestion.option_d_image_url },
-  ].filter((o) => o.text || o.img);
+  const baseOptionValues = [
+    { key: 'a', text: currentQuestion.option_a },
+    { key: 'b', text: currentQuestion.option_b },
+    { key: 'c', text: currentQuestion.option_c },
+    { key: 'd', text: currentQuestion.option_d },
+  ].filter((o) => o.text?.trim());
 
-  const signMap = new Map(trafficSigns.map((s) => [normalizeSignCode(s.sign_code), s]));
+  const optionValues = isSupplementalMode
+    ? (() => {
+        const correctKey = currentQuestion.correct_answer?.toLowerCase();
+        const wrongKey = currentQuestion.supplemental_wrong_answer?.toLowerCase();
+        const filtered = baseOptionValues.filter(
+          (opt) => opt.key === correctKey || opt.key === wrongKey
+        );
+        return shuffleArray(filtered);
+      })()
+    : baseOptionValues;
+
+  const signMap = new Map(
+    trafficSigns
+      .filter((s) => normalizeBracketToken(s.code) !== '')
+      .map((s) => [normalizeBracketToken(s.code), s])
+  );
   const questionParts = parseQuestionText(currentQuestion.question_text, signMap);
 
   const unansweredCount = questions.length - answeredCount;
@@ -498,6 +564,11 @@ const MockExam = () => {
               <span>{Math.round(progress)}%</span>
             </div>
             <Progress value={progress} className="h-2" />
+            {isSupplementalMode && (
+              <p className="text-xs text-muted-foreground">
+                وضع استكمالي: خياران لكل سؤال
+              </p>
+            )}
           </div>
 
           {/* Timer */}
@@ -569,13 +640,6 @@ const MockExam = () => {
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             {/* Question header */}
             <div className="bg-muted/50 p-6 text-center space-y-4">
-              {currentQuestion.image_url ? (
-                <img
-                  src={resolveUrl(currentQuestion.image_url)}
-                  alt="صورة السؤال"
-                  className="mx-auto max-h-48 object-contain rounded-lg"
-                />
-              ) : null}
               <h2 className="text-4xl font-bold text-foreground leading-relaxed flex flex-wrap items-center justify-center gap-2">
                 {questionParts.map((part, i) => {
                   if (part.type === 'text') {
@@ -605,44 +669,36 @@ const MockExam = () => {
             <div className="p-4 space-y-3">
               {optionValues.map((option, idx) => (
                 <button
-                  key={idx}
-                  onClick={() => !isFeedbackActive && selectAnswer(optionKeys[idx])}
+                  key={option.key}
+                  onClick={() => !isFeedbackActive && selectAnswer(option.key)}
                   disabled={isFeedbackActive}
                   className={cn(
                     'w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all text-right',
-                    getOptionStyle(optionKeys[idx]),
+                    getOptionStyle(option.key),
                     !isFeedbackActive && 'cursor-pointer'
                   )}
                 >
-                  {option.img ? (
-                    <img
-                      src={resolveUrl(option.img)}
-                      alt={`خيار ${optionLabels[idx]}`}
-                      className="h-14 w-auto object-contain rounded"
-                    />
-                  ) : (
-                    <span className="text-base flex-1 flex flex-wrap items-center gap-2">
-                      {parseQuestionText(option.text || '', signMap).map((part, partIdx) => {
-                        if (part.type === 'text') return <span key={partIdx}>{part.value}</span>;
-                        if (!part.sign) return <span key={partIdx}>[{part.code}]</span>;
-                        return (
-                          <span
-                            key={partIdx}
-                            className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-md px-1.5 py-0.5"
-                            title={part.sign.title}
-                          >
-                            <img
-                              src={resolveUrl(part.sign.image_url)}
-                              alt={part.sign.title}
-                              className="h-20 w-20 object-contain rounded bg-white"
-                            />
-                          </span>
-                        );
-                      })}
-                    </span>
-                  )}
+                  <span className="text-base flex-1 flex flex-wrap items-center gap-2">
+                    {parseQuestionText(option.text || '', signMap).map((part, partIdx) => {
+                      if (part.type === 'text') return <span key={partIdx}>{part.value}</span>;
+                      if (!part.sign) return <span key={partIdx}>[{part.code}]</span>;
+                      return (
+                        <span
+                          key={partIdx}
+                          className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-md px-1.5 py-0.5"
+                          title={part.sign.title}
+                        >
+                          <img
+                            src={resolveUrl(part.sign.image_url)}
+                            alt={part.sign.title}
+                            className="h-20 w-20 object-contain rounded bg-white"
+                          />
+                        </span>
+                      );
+                    })}
+                  </span>
                   <span className="w-8 h-8 rounded-full bg-muted flex items-center justify-center font-bold text-sm flex-shrink-0">
-                    {optionLabels[idx]}
+                    {OPTION_KEY_TO_LABEL[option.key] || option.key.toUpperCase()}
                   </span>
                 </button>
               ))}
@@ -662,7 +718,7 @@ const MockExam = () => {
                   <>
                     <XCircle className="h-5 w-5" />
                     إجابة خاطئة - الإجابة الصحيحة هي:{' '}
-                    {optionLabels[optionKeys.indexOf(correctKey ?? '')]}
+                    {OPTION_KEY_TO_LABEL[correctKey ?? ''] || ''}
                   </>
                 )}
               </div>

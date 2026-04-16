@@ -12,8 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Secrets — never commit (use .env.example as template)
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
 # Editor directories and files
-.vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store

@@ -38,8 +38,8 @@ export const defaultNavbarConfig: NavbarConfig = {
     },
   ],
   badge: {
-    enabled: true,
-    count: 1,
+    enabled: false,
+    count: 0,
     color: "destructive",
     targetHref: "/dashboard",
   },

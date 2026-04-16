@@ -28,7 +28,6 @@ This checklist tracks parity between local implementation and production referen
 - [ ] Students management CRUD states
 - [ ] Questions management CRUD states
 - [ ] Pricing management CRUD states
-- [ ] Appointments management CRUD states
 - [ ] Study materials management CRUD states
 - [ ] Success stories management CRUD states
 - [ ] Site settings management CRUD states

@@ -1,18 +1,10 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAdminRole } from '@/hooks/useAdminRole';
 import { AdminStudents } from '@/components/admin/AdminStudents';
 import AdminNavigation from '@/components/admin/AdminNavigation';
 
 const AdminStudentsPage = () => {
   const { isAdmin, isLoading } = useAdminRole();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!isLoading && !isAdmin) {
-      navigate('/');
-    }
-  }, [isAdmin, isLoading, navigate]);
 
   if (isLoading) {
     return (
@@ -25,7 +17,9 @@ const AdminStudentsPage = () => {
     );
   }
 
-  if (!isAdmin) return null;
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <>

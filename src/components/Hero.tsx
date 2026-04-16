@@ -1,21 +1,20 @@
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, CheckCircle, Users, Award, BookOpen, Star, Target, Trophy } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Users, Award, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import heroImage from '@/assets/hero-bg-modern.jpg';
 
 const Hero = () => {
   const features = [
-    { icon: Users, title: 'أكثر من 10,000 طالب', description: 'نجح في الحصول على رخصة القيادة' },
-    { icon: Award, title: 'معدل نجاح 95%', description: 'في الامتحانات النظرية والعملية' },
-    { icon: BookOpen, title: 'منهج شامل', description: 'يغطي جميع جوانب تعليم القيادة' },
+    { icon: Users, title: 'تعليم مرن', description: 'أسئلة وامتحانات تجريبية حسب نوع الرخصة' },
+    { icon: Award, title: 'متابعة التقدم', description: 'تتبع نتائجك وامتحاناتك من لوحة الطالب' },
+    { icon: BookOpen, title: 'منهج منظم', description: 'أسئلة وامتحانات تجريبية لاستعدادك للتووريا' },
   ];
 
   const quickLinks = [
     { title: 'أسئلة التووريا والامتحانات', href: '/questions', color: 'bg-primary' },
     { title: 'إشارات المرور', href: '/signs', color: 'bg-accent' },
-    { title: 'نتائج الطلاب', href: '/results', color: 'bg-success' },
-    { title: 'مواعيد الدروس', href: '/schedule', color: 'bg-warning' },
+    { title: 'نتائج الطلاب', href: '/student-results', color: 'bg-success' },
   ];
 
   return (
@@ -76,7 +75,7 @@ const Hero = () => {
           </div>
 
           {/* Quick Links */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {quickLinks.map((link, index) => (
               <Link key={index} to={link.href}>
                 <Card className="bg-white/90 backdrop-blur-md shadow-elevated hover:shadow-hero transition-all duration-500 cursor-pointer group hover:-translate-y-3 border-0">
@@ -93,34 +92,16 @@ const Hero = () => {
         </div>
       </div>
 
-      {/* Success Stories Banner */}
       <div className="bg-gradient-card py-20 border-t border-border/50">
         <div className="container mx-auto px-4">
-          <div className="text-center">
-            <h2 className="text-4xl font-bold text-foreground mb-8">معرض النجاحات</h2>
-            <p className="text-xl text-muted-foreground mb-12 max-w-2xl mx-auto">
-              انضم إلى آلاف الخريجين الناجحين الذين حققوا حلمهم في الحصول على رخصة القيادة
+          <div className="text-center max-w-2xl mx-auto">
+            <h2 className="text-4xl font-bold text-foreground mb-6">قصص النجاح</h2>
+            <p className="text-xl text-muted-foreground mb-10">
+              اطّلع على تجارب الخريجين المنشورة من قبل الأكاديمية من صفحة نتائج الطلاب.
             </p>
-            <div className="flex justify-center items-center space-x-12 rtl:space-x-reverse">
-              <div className="flex items-center space-x-3 rtl:space-x-reverse bg-white shadow-card p-6 rounded-2xl">
-                <div className="bg-success/10 p-3 rounded-xl">
-                  <CheckCircle className="h-8 w-8 text-success" />
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-success">95%</div>
-                  <div className="text-sm text-muted-foreground">نسبة النجاح</div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 rtl:space-x-reverse bg-white shadow-card p-6 rounded-2xl">
-                <div className="bg-primary/10 p-3 rounded-xl">
-                  <Users className="h-8 w-8 text-primary" />
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-primary">+10K</div>
-                  <div className="text-sm text-muted-foreground">خريج ناجح</div>
-                </div>
-              </div>
-            </div>
+            <Button size="lg" className="shadow-elevated" asChild>
+              <Link to="/student-results">عرض نتائج الطلاب</Link>
+            </Button>
           </div>
         </div>
       </div>
